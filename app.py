@@ -1,10 +1,9 @@
-# app.py
 from fastapi import FastAPI
 from backend.routes import router as routes_router
 
 app = FastAPI(title="Lucky Signals Backend")
 
-# Register routes (prefix /api)
+# Register routes
 app.include_router(routes_router, prefix="/api", tags=["signals"])
 
 @app.get("/")

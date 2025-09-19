@@ -7,7 +7,6 @@ channel = "stable-25_05"
 expertMode = true
 
 [workflows]
-runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"

@@ -4,32 +4,23 @@ from typing import List, Optional
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
 # 🔐 Get Telegram credentials from environment variables (secure)
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_telegram_message(message: str):
-    """Send a notification to your Telegram bot"""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Telegram credentials not configured")
+def send_telegram_message(text: str):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Missing Telegram credentials")
         return
     
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
+        "text": text
     }
     try:
-        response = requests.post(url, data=payload, timeout=10)
-        response.raise_for_status()
-        print("✅ Telegram notification sent")
-    except requests.exceptions.HTTPError as e:
-        if "chat not found" in str(e).lower():
-            print("❌ Telegram error: Chat not found. Please send /start to your bot first!")
-        else:
-            print(f"❌ Telegram HTTP error: {e}")
+        requests.post(url, json=payload)
     except Exception as e:
-        print("❌ Telegram send failed:", e)
+        print(f"❌ Failed to send Telegram message: {e}")
 
 def get_closes_from_klines(klines: List) -> List[float]:
     """

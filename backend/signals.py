@@ -47,14 +47,25 @@ def send_telegram_message(text: str):
         print(f"❌ Failed to send Telegram message: {e}")
 
 def generate_single_signal(symbol: str, timeframe: str = "15min", send_notification: bool = False) -> Dict:
-    """Generate signal for a single crypto pair without sending notification by default"""
+    """Generate signal for a single crypto pair with accuracy validation and fresh data"""
     try:
+        # Always fetch fresh real-time market data
         price = get_ticker_price(symbol)
         klines = fetch_klines(symbol, interval=timeframe, limit=200)
         closes = get_closes_from_klines(klines)
         if not closes:
             return {"symbol": symbol, "error": "no historical closes available"}
 
+        # Calculate accuracy using backtesting on last 20 candles
+        accuracy = backtest_signal_accuracy(symbol, timeframe, test_periods=20)
+        print(f"🎯 {symbol} accuracy: {accuracy:.1f}%")
+        
+        # Only proceed if accuracy is >= 70%
+        if accuracy < 70.0:
+            print(f"⚠️ Skipping {symbol} - accuracy {accuracy:.1f}% below 70% threshold")
+            return {"symbol": symbol, "skipped": True, "accuracy": accuracy, "reason": "accuracy below 70% threshold"}
+
+        # Calculate indicators with fresh data
         rsi = calculate_rsi(closes, period=14)
         ema12 = simple_ema(closes, 12)
         ema26 = simple_ema(closes, 26)
@@ -144,7 +155,8 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
             "stop_loss_long": sl_long,
             "take_profit_short": tp_short,
             "stop_loss_short": sl_short,
-            "timestamp": datetime.now().strftime("%H:%M:%S")
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "accuracy": accuracy
         }
 
         # Send notification only if requested
@@ -227,50 +239,105 @@ def generate_batch_signals() -> List[Dict]:
     return results
 
 def send_batch_signals_to_telegram(signals: List[Dict]):
-    """Send a consolidated message with all signals to Telegram"""
+    """Send detailed alerts for each symbol in one consolidated Telegram message"""
     if not signals:
         return
-        
-    # Separate signals by type
-    buy_signals = [s for s in signals if s.get("signal") == "BUY" and not s.get("error")]
-    sell_signals = [s for s in signals if s.get("signal") == "SELL" and not s.get("error")]
-    hold_signals = [s for s in signals if s.get("signal") == "HOLD" and not s.get("error")]
-    errors = [s for s in signals if s.get("error")]
     
-    message = f"📊 *15-Minute Crypto Signals Update*\n"
+    # Filter valid signals (not errors or skipped)
+    valid_signals = [s for s in signals if not s.get("error") and not s.get("skipped")]
+    skipped_signals = [s for s in signals if s.get("skipped")]
+    error_signals = [s for s in signals if s.get("error")]
+    
+    if not valid_signals and not skipped_signals and not error_signals:
+        return
+    
+    message = f"📊 *Crypto Signals Update*\n"
     message += f"🕐 Time: `{datetime.now().strftime('%H:%M:%S')}`\n\n"
     
-    if buy_signals:
-        message += f"🟢 *BUY SIGNALS ({len(buy_signals)}):*\n"
-        for signal in buy_signals:
-            confidence_stars = "⭐" * min(int(signal.get('confidence', 0)), 3)
-            order_type = signal.get('order_type', 'LIMIT')
-            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} {confidence_stars}\n"
-            message += f"  {order_type} | RSI: {signal['rsi']:.1f} | TP: ${signal.get('take_profit_long', 0):,.2f}\n"
-        message += "\n"
+    # Add detailed alerts for each valid signal
+    signal_count = 0
+    for signal in valid_signals:
+        if signal.get("signal") == "HOLD":
+            continue  # Skip HOLD signals for cleaner output
+            
+        signal_count += 1
+        
+        # Get signal details
+        symbol = signal.get("symbol", "")
+        signal_type = signal.get("signal", "")
+        price = signal.get("price", 0)
+        confidence = signal.get("confidence", 0)
+        rsi = signal.get("rsi", 0)
+        ema12 = signal.get("ema12", 0)
+        ema26 = signal.get("ema26", 0)
+        reasons = signal.get("reasons", [])
+        timestamp = signal.get("timestamp", "")
+        
+        # Signal emoji and stars
+        emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}
+        signal_emoji = emoji.get(signal_type, "⚪")
+        confidence_stars = "⭐" * min(int(confidence), 5)
+        
+        # Take profit and stop loss
+        if signal_type == "BUY":
+            take_profit = signal.get("take_profit_long")
+            stop_loss = signal.get("stop_loss_long")
+        else:  # SELL
+            take_profit = signal.get("take_profit_short")
+            stop_loss = signal.get("stop_loss_short")
+        
+        # Format reason text
+        reason_text = ", ".join(reasons[:2]) if reasons else "Technical analysis"
+        
+        # Create detailed alert
+        message += f"🚨 *Crypto Signal Alert*\n"
+        message += f"Pair: `{symbol}`\n"
+        message += f"Signal: {signal_emoji} *{signal_type}* {confidence_stars}\n"
+        message += f"Entry Price: `${price:,.6f}`\n"
+        message += f"Order Type: `LIMIT`\n"
+        message += f"Confidence: `{confidence:.1f}/5.0`\n\n"
+        
+        message += f"📊 *Technical Analysis:*\n"
+        message += f"RSI: `{rsi:.1f}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`\n"
+        message += f"Reasons: {reason_text}\n\n"
+        
+        message += f"💰 *Trade Setup:*\n"
+        if take_profit and stop_loss:
+            message += f"Take Profit: `${take_profit:,.6f}`\n"
+            message += f"Stop Loss: `${stop_loss:,.6f}`\n\n"
+        else:
+            message += f"Take Profit: `Not set`\n"
+            message += f"Stop Loss: `Not set`\n\n"
+        
+        message += f"🕐 Time: `{timestamp}`\n"
+        message += f"----------------------\n\n"
     
-    if sell_signals:
-        message += f"🔴 *SELL SIGNALS ({len(sell_signals)}):*\n"
-        for signal in sell_signals:
-            confidence_stars = "⭐" * min(int(signal.get('confidence', 0)), 3)
-            order_type = signal.get('order_type', 'LIMIT')
-            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} {confidence_stars}\n"
-            message += f"  {order_type} | RSI: {signal['rsi']:.1f} | TP: ${signal.get('take_profit_short', 0):,.2f}\n"
-        message += "\n"
+    # Add summary at the end
+    hold_count = len([s for s in valid_signals if s.get("signal") == "HOLD"])
+    if hold_count > 0:
+        message += f"🟡 *{hold_count} pairs in HOLD status*\n\n"
     
-    if hold_signals:
-        message += f"🟡 *HOLD ({len(hold_signals)} pairs):*\n"
-        # Show first 5 HOLD signals to avoid message being too long
-        for signal in hold_signals[:5]:
-            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f}\n"
-        if len(hold_signals) > 5:
-            message += f"• ... and {len(hold_signals) - 5} more\n"
-        message += "\n"
+    if skipped_signals:
+        message += f"⚠️ *{len(skipped_signals)} signals skipped* (accuracy < 70%)\n"
+        skipped_symbols = [s.get("symbol", "") for s in skipped_signals if s.get("symbol")]
+        message += f"Skipped: {', '.join(skipped_symbols)}\n\n"
     
-    if errors:
-        message += f"❌ *Errors ({len(errors)}):* {', '.join(s['symbol'] for s in errors)}\n"
+    if error_signals:
+        message += f"❌ *{len(error_signals)} errors:* "
+        error_symbols = [s.get("symbol", "") for s in error_signals if s.get("symbol")]
+        message += f"{', '.join(error_symbols)}\n\n"
     
-    message += f"\n_Next update in 15 minutes ⏰_"
+    # Final note
+    if signal_count == 0:
+        message += f"📈 *No high-confidence signals at this time*\n"
+        message += f"All signals either in HOLD or below 70% accuracy threshold\n\n"
+    
+    message += f"⚠️ *RISK WARNING*\n"
+    message += f"• Crypto trading involves high risk\n"
+    message += f"• Only invest what you can afford to lose\n"
+    message += f"• Always do your own research (DYOR)\n"
+    message += f"• Consider market conditions and news\n\n"
+    message += f"_Next update in 15 minutes ⏰_"
     
     send_telegram_message(message)
 
@@ -435,6 +502,104 @@ def simple_ema(values: List[float], period: int):
     for price in values[period:]:
         prev = price*k + prev*(1-k)
     return prev
+
+def backtest_signal_accuracy(symbol: str, timeframe: str = "15min", test_periods: int = 20) -> float:
+    """
+    Backtest the signal generation logic on historical data to calculate accuracy.
+    Returns accuracy percentage (0-100) based on correct signal predictions.
+    """
+    try:
+        # Fetch more historical data for backtesting (need extra for indicators)
+        klines = fetch_klines(symbol, interval=timeframe, limit=200)
+        closes = get_closes_from_klines(klines)
+        
+        if len(closes) < test_periods + 50:  # Need extra data for indicators
+            print(f"⚠️ Insufficient data for backtesting {symbol}")
+            return 0.0
+        
+        correct_predictions = 0
+        total_predictions = 0
+        
+        # Test on the last test_periods candles
+        for i in range(len(closes) - test_periods, len(closes) - 1):
+            # Get historical data up to point i
+            historical_closes = closes[:i+1]
+            
+            if len(historical_closes) < 50:  # Need minimum data for indicators
+                continue
+                
+            # Calculate indicators at point i
+            rsi = calculate_rsi(historical_closes, period=14)
+            ema12 = simple_ema(historical_closes, 12)
+            ema26 = simple_ema(historical_closes, 26)
+            
+            if rsi is None or ema12 is None or ema26 is None:
+                continue
+                
+            # Generate signal using same logic as generate_single_signal
+            signal = "HOLD"
+            confidence = 0
+            
+            # RSI Analysis (same thresholds as main function)
+            if rsi < 40:
+                signal = "BUY"
+                confidence += 2
+            elif rsi > 60:
+                signal = "SELL"
+                confidence += 2
+            elif 40 <= rsi <= 50:
+                signal = "BUY"
+                confidence += 1
+            elif 50 <= rsi <= 60:
+                signal = "SELL"
+                confidence += 1
+            
+            # EMA Trend Analysis
+            ema_signal = "HOLD"
+            if ema12 > ema26:
+                ema_signal = "BUY"
+                ema_diff_pct = ((ema12 - ema26) / ema26) * 100
+                confidence += 1 if ema_diff_pct > 0.5 else 0.5
+            elif ema12 < ema26:
+                ema_signal = "SELL"
+                ema_diff_pct = ((ema12 - ema26) / ema26) * 100
+                confidence += 1 if abs(ema_diff_pct) > 0.5 else 0.5
+            
+            # Final signal decision (same logic as main function)
+            if signal == ema_signal and confidence >= 2:
+                final_signal = signal
+            elif confidence >= 3:
+                final_signal = signal
+            elif ema_signal != "HOLD" and confidence >= 1.5:
+                final_signal = ema_signal
+            else:
+                final_signal = signal if confidence >= 1 else "HOLD"
+            
+            # Check if signal was correct by looking at next candle
+            if i + 1 < len(closes):
+                current_price = closes[i]
+                next_price = closes[i + 1]
+                price_change_pct = ((next_price - current_price) / current_price) * 100
+                
+                # Define success criteria (conservative thresholds)
+                if final_signal == "BUY" and price_change_pct > 0.1:  # Price went up
+                    correct_predictions += 1
+                elif final_signal == "SELL" and price_change_pct < -0.1:  # Price went down
+                    correct_predictions += 1
+                elif final_signal == "HOLD" and abs(price_change_pct) <= 0.5:  # Price stayed stable
+                    correct_predictions += 1
+                
+                total_predictions += 1
+        
+        if total_predictions == 0:
+            return 0.0
+            
+        accuracy = (correct_predictions / total_predictions) * 100
+        return round(accuracy, 2)
+        
+    except Exception as e:
+        print(f"❌ Backtesting error for {symbol}: {e}")
+        return 0.0
 
 def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour"):
     """

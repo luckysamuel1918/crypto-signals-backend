@@ -120,7 +120,7 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
         return {"symbol": symbol, "error": str(e)}
 
 # Backward compatibility function for existing API
-def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour"):
+def generate_signal_with_notification(symbol: str = "BTC-USDT", timeframe: str = "1hour"):
     """Generate signal for backward compatibility with existing API"""
     return generate_single_signal(symbol, timeframe, send_notification=True)
 

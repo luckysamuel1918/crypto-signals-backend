@@ -7,6 +7,7 @@ channel = "stable-25_05"
 expertMode = true
 
 [workflows]
+runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
@@ -26,7 +27,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload"
+args = "uvicorn app:app --host 0.0.0.0 --port 5000 --reload"
 waitForPort = 5000
 
 [[ports]]

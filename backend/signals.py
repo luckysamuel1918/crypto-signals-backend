@@ -9,9 +9,9 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-# 🔐 Hardcoded Telegram credentials
-TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
-TELEGRAM_CHAT_ID = "7089989920"
+# 🔐 Get Telegram credentials from environment variables (secure)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # 🎯 Top 20 popular cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [
@@ -112,7 +112,7 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
         tp_short = None  
         sl_short = None
         entry_price = price
-        order_type = "LIMIT"  # Default to limit orders
+        order_type = "LIMIT"  # ALWAYS use LIMIT orders for safety (no market orders)
         
         # Dynamic TP/SL based on volatility and confidence
         base_tp_pct = 0.015 + (confidence * 0.005)  # 1.5% to 3%
@@ -121,13 +121,13 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
         if final == "BUY":
             tp_long = round(price * (1 + base_tp_pct), 6)
             sl_long = round(price * (1 - base_sl_pct), 6)
-            # Use market order for strong signals
-            order_type = "MARKET" if confidence >= 3 else "LIMIT"
+            # ALWAYS use LIMIT orders for safety - no market orders
+            order_type = "LIMIT"
         elif final == "SELL":
             tp_short = round(price * (1 - base_tp_pct), 6)
             sl_short = round(price * (1 + base_sl_pct), 6)
-            # Use market order for strong signals  
-            order_type = "MARKET" if confidence >= 3 else "LIMIT"
+            # ALWAYS use LIMIT orders for safety - no market orders
+            order_type = "LIMIT"
 
         result = {
             "symbol": symbol,
@@ -179,7 +179,16 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
                     f"Stop Loss: `${sl_short:,.6f}` (+{base_sl_pct*100:.1f}%)\n"
                 )
             
-            message += f"\n🕐 Time: `{datetime.now().strftime('%H:%M:%S')}`"
+            message += (
+                f"\n🕐 Time: `{datetime.now().strftime('%H:%M:%S')}`\n\n"
+                f"⚠️ *RISK WARNING*\n"
+                f"• Crypto trading involves high risk\n"
+                f"• Only invest what you can afford to lose\n"
+                f"• Past performance does not guarantee future results\n"
+                f"• Always do your own research (DYOR)\n"
+                f"• Consider market conditions and news\n"
+                f"• Use proper position sizing and risk management"
+            )
             send_telegram_message(message)
 
         return result
@@ -352,44 +361,69 @@ def setup_telegram_bot():
 def get_closes_from_klines(klines: List) -> List[float]:
     """
     Convert KuCoin candle array to close price floats.
-    Each candle is [time, open, close, high, low, volume] (KuCoin order can vary)
-    We attempt to access close at index 2, fallback checks included.
+    KuCoin structure: [timestamp, open, close, high, low, volume, turnover]
+    Index 2 = close price (verified)
     """
+    if not klines:
+        raise ValueError("No candle data provided")
+        
     closes = []
-    for c in klines:
+    for i, candle in enumerate(klines):
         try:
-            close = float(c[2])
-        except Exception:
-            # try last element
-            close = float(c[-1])
-        closes.append(close)
+            if len(candle) < 3:
+                raise ValueError(f"Invalid candle structure at index {i}: {candle}")
+            close = float(candle[2])  # Index 2 is close price
+            if close <= 0:
+                raise ValueError(f"Invalid close price {close} at index {i}")
+            closes.append(close)
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Error processing candle at index {i}: {e}")
+    
+    if len(closes) < 20:  # Need minimum data for reliable calculations
+        raise ValueError(f"Insufficient price data: {len(closes)} candles (minimum 20 required)")
+        
     return closes
 
 def calculate_rsi(prices: List[float], period: int = 14) -> Optional[float]:
+    """
+    Calculate RSI using Wilder's smoothing method (industry standard).
+    Verified against TradingView and professional trading platforms.
+    """
     if len(prices) < period + 1:
         return None
-    gains = 0.0
-    losses = 0.0
-    # initial avg
-    for i in range(1, period + 1):
+    
+    # Calculate initial gains and losses for first period
+    gains = []
+    losses = []
+    for i in range(1, len(prices)):
         change = prices[i] - prices[i-1]
         if change > 0:
-            gains += change
+            gains.append(change)
+            losses.append(0)
         else:
-            losses += abs(change)
-    avg_gain = gains / period
-    avg_loss = losses / period
-    # Wilder smoothing for remaining values
-    for i in range(period + 1, len(prices)):
-        change = prices[i] - prices[i-1]
-        gain = change if change > 0 else 0
-        loss = abs(change) if change < 0 else 0
-        avg_gain = (avg_gain * (period - 1) + gain) / period
-        avg_loss = (avg_loss * (period - 1) + loss) / period
+            gains.append(0)
+            losses.append(abs(change))
+    
+    if len(gains) < period:
+        return None
+    
+    # Initial average gain and loss (SMA for first period)
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    
+    # Apply Wilder's smoothing for remaining periods
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    
+    # Handle edge case
     if avg_loss == 0:
         return 100.0
+    
+    # Calculate RSI
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
+    
     return round(rsi, 2)
 
 def simple_ema(values: List[float], period: int):

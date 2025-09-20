@@ -50,4 +50,14 @@ async def shutdown_event():
 
 @app.get("/")
 def root():
-    return {"message": "Backend is running successfully"}
+    return {
+        "message": "Lucky Signals Backend - Crypto Trading Signals API",
+        "version": "2.0.0",
+        "endpoints": {
+            "/api/signal": "Get trading signal for a symbol",
+            "/docs": "API documentation"
+        },
+        "disclaimer": "⚠️ RISK WARNING: Trading cryptocurrencies involves substantial risk of loss. Signals are for educational purposes only. Always do your own research and never invest more than you can afford to lose.",
+        "data_source": "KuCoin API",
+        "indicators": ["RSI-14", "EMA-12", "EMA-26"]
+    }

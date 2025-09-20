@@ -44,4 +44,4 @@ externalPort = 8000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
+run = ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0"]

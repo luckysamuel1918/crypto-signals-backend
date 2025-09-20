@@ -9,9 +9,9 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-# 🔐 Get Telegram credentials from environment variables (secure)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# 🔐 Hardcoded Telegram credentials
+TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
+TELEGRAM_CHAT_ID = "7089989920"
 
 # 🎯 Top 20 popular cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [
@@ -59,60 +59,127 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
         ema12 = simple_ema(closes, 12)
         ema26 = simple_ema(closes, 26)
 
-        # Signal decision logic
+        # Enhanced signal decision logic with multiple indicators
         signal = "HOLD"
-        if rsi is not None:
-            if rsi < 30:
-                signal = "BUY"
-            elif rsi > 70:
-                signal = "SELL"
+        confidence = 0
+        signal_reasons = []
         
-        # EMA confirmation
+        # RSI Analysis (more sensitive thresholds)
+        if rsi is not None:
+            if rsi < 40:  # More sensitive buy threshold
+                signal = "BUY" 
+                confidence += 2
+                signal_reasons.append(f"RSI oversold ({rsi:.1f})")
+            elif rsi > 60:  # More sensitive sell threshold
+                signal = "SELL"
+                confidence += 2  
+                signal_reasons.append(f"RSI overbought ({rsi:.1f})")
+            elif 40 <= rsi <= 50:
+                signal = "BUY"
+                confidence += 1
+                signal_reasons.append(f"RSI neutral-bullish ({rsi:.1f})")
+            elif 50 <= rsi <= 60:
+                signal = "SELL" 
+                confidence += 1
+                signal_reasons.append(f"RSI neutral-bearish ({rsi:.1f})")
+        
+        # EMA Trend Analysis
+        ema_signal = "HOLD"
         if ema12 is not None and ema26 is not None:
-            if ema12 > ema26 and signal == "BUY":
-                final = "BUY"
-            elif ema12 < ema26 and signal == "SELL":
-                final = "SELL"
-            else:
-                final = "HOLD"
-        else:
+            ema_diff_pct = ((ema12 - ema26) / ema26) * 100
+            if ema12 > ema26:
+                ema_signal = "BUY"
+                confidence += 1 if ema_diff_pct > 0.5 else 0.5
+                signal_reasons.append(f"EMA bullish trend ({ema_diff_pct:.2f}%)")
+            elif ema12 < ema26:
+                ema_signal = "SELL"
+                confidence += 1 if abs(ema_diff_pct) > 0.5 else 0.5
+                signal_reasons.append(f"EMA bearish trend ({ema_diff_pct:.2f}%)")
+        
+        # Final signal with confirmation
+        if signal == ema_signal and confidence >= 2:
             final = signal
-
-        tp = None
-        sl = None
-        TP_PCT = 0.02  # 2%
-        SL_PCT = 0.01  # 1%
+        elif confidence >= 3:
+            final = signal
+        elif ema_signal != "HOLD" and confidence >= 1.5:
+            final = ema_signal
+        else:
+            final = signal if confidence >= 1 else "HOLD"
+            
+        # Enhanced take profit and stop loss calculations
+        tp_long = None
+        sl_long = None
+        tp_short = None  
+        sl_short = None
+        entry_price = price
+        order_type = "LIMIT"  # Default to limit orders
+        
+        # Dynamic TP/SL based on volatility and confidence
+        base_tp_pct = 0.015 + (confidence * 0.005)  # 1.5% to 3%
+        base_sl_pct = 0.008 + (confidence * 0.002)  # 0.8% to 1.4%
+        
         if final == "BUY":
-            tp = round(price * (1 + TP_PCT), 6)
-            sl = round(price * (1 - SL_PCT), 6)
+            tp_long = round(price * (1 + base_tp_pct), 6)
+            sl_long = round(price * (1 - base_sl_pct), 6)
+            # Use market order for strong signals
+            order_type = "MARKET" if confidence >= 3 else "LIMIT"
         elif final == "SELL":
-            tp = round(price * (1 - TP_PCT), 6)
-            sl = round(price * (1 + SL_PCT), 6)
+            tp_short = round(price * (1 - base_tp_pct), 6)
+            sl_short = round(price * (1 + base_sl_pct), 6)
+            # Use market order for strong signals  
+            order_type = "MARKET" if confidence >= 3 else "LIMIT"
 
         result = {
             "symbol": symbol,
             "price": round(price, 6),
             "signal": final,
+            "confidence": round(confidence, 1),
+            "reasons": signal_reasons,
             "rsi": rsi,
             "ema12": round(ema12, 6) if ema12 else None,
             "ema26": round(ema26, 6) if ema26 else None,
-            "take_profit": tp,
-            "stop_loss": sl,
+            "entry_price": entry_price,
+            "order_type": order_type,
+            "take_profit_long": tp_long,
+            "stop_loss_long": sl_long,
+            "take_profit_short": tp_short,
+            "stop_loss_short": sl_short,
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
 
         # Send notification only if requested
         if send_notification:
             emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}
+            confidence_stars = "⭐" * min(int(confidence), 5)
+            
             message = (
                 f"🚨 *Crypto Signal Alert*\n"
                 f"Pair: `{symbol}`\n"
-                f"Price: `${price:,.2f}`\n"
-                f"Signal: {emoji.get(final, '⚪')} *{final}*\n"
-                f"RSI: `{rsi}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`"
+                f"Signal: {emoji.get(final, '⚪')} *{final}* {confidence_stars}\n"
+                f"Entry Price: `${entry_price:,.6f}`\n"
+                f"Order Type: `{order_type}`\n"
+                f"Confidence: `{confidence:.1f}/5.0`\n\n"
+                f"📊 *Technical Analysis:*\n"
+                f"RSI: `{rsi:.1f}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`\n"
             )
-            if tp and sl:
-                message += f"\nTake Profit: `${tp:,.2f}`\nStop Loss: `${sl:,.2f}`"
+            
+            if signal_reasons:
+                message += f"Reasons: {', '.join(signal_reasons[:2])}\n\n"
+            
+            if final == "BUY":
+                message += (
+                    f"💰 *Long Position Setup:*\n"
+                    f"Take Profit: `${tp_long:,.6f}` (+{base_tp_pct*100:.1f}%)\n"
+                    f"Stop Loss: `${sl_long:,.6f}` (-{base_sl_pct*100:.1f}%)\n"
+                )
+            elif final == "SELL":
+                message += (
+                    f"💰 *Short Position Setup:*\n"  
+                    f"Take Profit: `${tp_short:,.6f}` (-{base_tp_pct*100:.1f}%)\n"
+                    f"Stop Loss: `${sl_short:,.6f}` (+{base_sl_pct*100:.1f}%)\n"
+                )
+            
+            message += f"\n🕐 Time: `{datetime.now().strftime('%H:%M:%S')}`"
             send_telegram_message(message)
 
         return result
@@ -167,13 +234,19 @@ def send_batch_signals_to_telegram(signals: List[Dict]):
     if buy_signals:
         message += f"🟢 *BUY SIGNALS ({len(buy_signals)}):*\n"
         for signal in buy_signals:
-            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} (RSI: {signal['rsi']})\n"
+            confidence_stars = "⭐" * min(int(signal.get('confidence', 0)), 3)
+            order_type = signal.get('order_type', 'LIMIT')
+            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} {confidence_stars}\n"
+            message += f"  {order_type} | RSI: {signal['rsi']:.1f} | TP: ${signal.get('take_profit_long', 0):,.2f}\n"
         message += "\n"
     
     if sell_signals:
         message += f"🔴 *SELL SIGNALS ({len(sell_signals)}):*\n"
         for signal in sell_signals:
-            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} (RSI: {signal['rsi']})\n"
+            confidence_stars = "⭐" * min(int(signal.get('confidence', 0)), 3)
+            order_type = signal.get('order_type', 'LIMIT')
+            message += f"• `{signal['symbol']}` @ ${signal['price']:,.2f} {confidence_stars}\n"
+            message += f"  {order_type} | RSI: {signal['rsi']:.1f} | TP: ${signal.get('take_profit_short', 0):,.2f}\n"
         message += "\n"
     
     if hold_signals:
@@ -331,80 +404,7 @@ def simple_ema(values: List[float], period: int):
 
 def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour"):
     """
-    Generate a trading signal with advanced technical analysis and send to Telegram.
-    Returns a dict with:
-    - symbol, price, signal (BUY/SELL/HOLD), rsi, ema12, ema26, take_profit, stop_loss
-    Strategy:
-      - RSI-based primary signal:
-          RSI < 30 => BUY
-          RSI > 70 => SELL
-      - EMA12/EMA26 used as confirmation:
-          if EMA12 > EMA26 -> bullish
-          if EMA12 < EMA26 -> bearish
-      - TP/SL fixed % (tweakable)
+    Enhanced trading signal generation with improved technical analysis.
+    Used by the API endpoint - calls the enhanced generate_single_signal function.
     """
-    # fetch current price (fast) and klines (for indicators)
-    price = get_ticker_price(symbol)
-    klines = fetch_klines(symbol, interval=timeframe, limit=200)
-    closes = get_closes_from_klines(klines)
-    if not closes:
-        return {"error": "no historical closes available"}
-
-    rsi = calculate_rsi(closes, period=14)
-    ema12 = simple_ema(closes, 12)
-    ema26 = simple_ema(closes, 26)
-
-    # Decide
-    signal = "HOLD"
-    if rsi is not None:
-        if rsi < 30:
-            signal = "BUY"
-        elif rsi > 70:
-            signal = "SELL"
-    # Confirmation with EMAs
-    if ema12 is not None and ema26 is not None:
-        if ema12 > ema26 and signal == "BUY":
-            final = "BUY"
-        elif ema12 < ema26 and signal == "SELL":
-            final = "SELL"
-        else:
-            final = "HOLD"
-    else:
-        final = signal
-
-    tp = None
-    sl = None
-    TP_PCT = 0.02  # 2%
-    SL_PCT = 0.01  # 1%
-    if final == "BUY":
-        tp = round(price * (1 + TP_PCT), 6)
-        sl = round(price * (1 - SL_PCT), 6)
-    elif final == "SELL":
-        tp = round(price * (1 - TP_PCT), 6)
-        sl = round(price * (1 + SL_PCT), 6)
-
-    # 🚨 Send Telegram notification for all signals
-    emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}
-    message = (
-        f"🚨 *Crypto Signal Alert*\n"
-        f"Pair: `{symbol}`\n"
-        f"Price: `${price:,.2f}`\n"
-        f"Signal: {emoji.get(final, '⚪')} *{final}*\n"
-        f"RSI: `{rsi}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`"
-    )
-    
-    if tp and sl:
-        message += f"\nTake Profit: `${tp:,.2f}`\nStop Loss: `${sl:,.2f}`"
-    
-    send_telegram_message(message)
-
-    return {
-        "symbol": symbol,
-        "price": round(price, 6),
-        "signal": final,
-        "rsi": rsi,
-        "ema12": round(ema12, 6) if ema12 else None,
-        "ema26": round(ema26, 6) if ema26 else None,
-        "take_profit": tp,
-        "stop_loss": sl
-    }
+    return generate_single_signal(symbol, timeframe, send_notification=True)

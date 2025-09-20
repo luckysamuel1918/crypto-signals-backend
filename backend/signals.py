@@ -31,6 +31,22 @@ def send_telegram_message(text: str):
         print("⚠️ Missing Telegram credentials")
         return
     
+    # Split message if it's too long (Telegram limit is 4096 characters)
+    max_length = 4000  # Leave some buffer
+    if len(text) <= max_length:
+        _send_single_telegram_message(text)
+    else:
+        # Split the message into chunks
+        chunks = _split_telegram_message(text, max_length)
+        for i, chunk in enumerate(chunks):
+            if i > 0:
+                # Add small delay between messages to avoid rate limiting
+                import time
+                time.sleep(1)
+            _send_single_telegram_message(chunk)
+
+def _send_single_telegram_message(text: str):
+    """Send a single Telegram message"""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -46,6 +62,27 @@ def send_telegram_message(text: str):
     except Exception as e:
         print(f"❌ Failed to send Telegram message: {e}")
 
+def _split_telegram_message(text: str, max_length: int) -> List[str]:
+    """Split a long message into smaller chunks while preserving formatting"""
+    chunks = []
+    lines = text.split('\n')
+    current_chunk = ""
+    
+    for line in lines:
+        # If adding this line would exceed the limit, save current chunk and start new one
+        if len(current_chunk) + len(line) + 1 > max_length:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+        
+        current_chunk += line + "\n"
+    
+    # Add the last chunk if it has content
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks
+
 def generate_single_signal(symbol: str, timeframe: str = "15min", send_notification: bool = False) -> Dict:
     """Generate signal for a single crypto pair with accuracy validation and fresh data"""
     try:
@@ -60,10 +97,10 @@ def generate_single_signal(symbol: str, timeframe: str = "15min", send_notificat
         accuracy = backtest_signal_accuracy(symbol, timeframe, test_periods=20)
         print(f"🎯 {symbol} accuracy: {accuracy:.1f}%")
         
-        # Only proceed if accuracy is >= 70%
-        if accuracy < 70.0:
-            print(f"⚠️ Skipping {symbol} - accuracy {accuracy:.1f}% below 70% threshold")
-            return {"symbol": symbol, "skipped": True, "accuracy": accuracy, "reason": "accuracy below 70% threshold"}
+        # Only proceed if accuracy is >= 50% (balanced threshold for quality signals)
+        if accuracy < 50.0:
+            print(f"⚠️ Skipping {symbol} - accuracy {accuracy:.1f}% below 50% threshold")
+            return {"symbol": symbol, "skipped": True, "accuracy": accuracy, "reason": "accuracy below 50% threshold"}
 
         # Calculate indicators with fresh data
         rsi = calculate_rsi(closes, period=14)
@@ -377,6 +414,9 @@ def stop_auto_signals():
 
 async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command from Telegram bot"""
+    if not update.message:
+        return
+        
     start_auto_signals()
     await update.message.reply_text(
         "🚀 *Lucky Signals Bot Started!*\n\n"
@@ -391,11 +431,17 @@ async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /stop command from Telegram bot"""
+    if not update.message:
+        return
+        
     stop_auto_signals()
     await update.message.reply_text("🛑 Auto signals stopped!")
 
 async def handle_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /status command from Telegram bot"""
+    if not update.message:
+        return
+        
     status = "✅ Running" if is_auto_signals_running else "❌ Stopped"
     await update.message.reply_text(
         f"📊 *Bot Status:* {status}\n"

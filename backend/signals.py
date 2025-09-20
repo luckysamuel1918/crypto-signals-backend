@@ -9,9 +9,9 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-# 🔐 Get Telegram credentials from environment variables (secure)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# 🔐 Telegram credentials (hardcoded)
+TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
+TELEGRAM_CHAT_ID = "7089989920"
 
 # 🎯 Top 20 popular cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [
@@ -27,10 +27,6 @@ telegram_bot = None
 is_auto_signals_running = False
 
 def send_telegram_message(text: str):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Missing Telegram credentials")
-        return
-    
     # Split message if it's too long (Telegram limit is 4096 characters)
     max_length = 4000  # Leave some buffer
     if len(text) <= max_length:
@@ -453,10 +449,6 @@ async def handle_status_command(update: Update, context: ContextTypes.DEFAULT_TY
 def setup_telegram_bot():
     """Setup Telegram bot with command handlers"""
     global telegram_bot
-    if not TELEGRAM_BOT_TOKEN:
-        print("⚠️ No Telegram bot token provided")
-        return None
-        
     try:
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
         

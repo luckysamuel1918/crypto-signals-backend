@@ -25,17 +25,23 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
 - requests - HTTP client for KuCoin API calls
 
 ## Current Setup
-- Backend server running on port 5000
+- Backend server running on port 5000 via uvicorn
 - Uses KuCoin public API (no authentication required)
-- Configured for Replit environment with proper host binding
+- Configured for Replit environment with proper host binding (0.0.0.0:5000)
+- Deployment configured for autoscale production environment
+- Main entry point: app.py (removed duplicate backend/main.py)
 
 ## Architecture
 - RESTful API design
 - Modular structure with separate services
 - Technical indicators: RSI (14-period) and EMA (12/26-period)
 - Risk management with configurable take-profit (2%) and stop-loss (1%) levels
+- Optional Telegram bot integration for notifications
 
-## Recent Changes
-- Fixed import issues and type hints
-- Configured workflow for Replit environment
-- Set up proper host binding for public access
+## Recent Changes (Replit Import Setup)
+- Installed dependencies via uv/pyproject.toml
+- Fixed duplicate function definition in signals.py
+- Removed duplicate backend/main.py file
+- Set up workflow "Backend API" running uvicorn on port 5000
+- Configured deployment for autoscale production
+- Verified API endpoints working correctly (/api/signal and root)

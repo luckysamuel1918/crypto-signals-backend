@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from backend.signals_serverless import generate_signal
+from backend.signals import generate_signal
 
 router = APIRouter()
 

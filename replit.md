@@ -65,7 +65,39 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
 - ✅ Application ready for use - all core functionality working
 - ✅ Import process completed successfully
 
+## Telegram Integration Setup
+
+The application supports automatic Telegram notifications for trading signals. To enable this feature:
+
+1. **Set up environment variables (Secure Method - Recommended):**
+   - Go to the "Secrets" tab in Replit (lock icon in the sidebar)
+   - Add the following secrets:
+     - `TELEGRAM_BOT_TOKEN` = Your bot token from [@BotFather](https://t.me/BotFather)
+     - `TELEGRAM_CHAT_ID` = Your Telegram chat ID
+   
+2. **How to get credentials:**
+   - **Bot Token:** Message [@BotFather](https://t.me/BotFather) on Telegram, create a new bot with `/newbot`, and copy the token
+   - **Chat ID:** Message [@userinfobot](https://t.me/userinfobot) on Telegram to get your chat ID
+
+3. **Restart the application** after adding secrets to activate Telegram notifications
+
+**Note:** If these credentials are not set, the application will continue to work normally for API calls, but Telegram notifications will be skipped with a warning message. This is intentional for security - credentials are never hardcoded in the source code.
+
+## Automated Signal Generation
+
+- **Scheduler:** APScheduler runs in the background
+- **Frequency:** Signals are generated every 15 minutes automatically
+- **Pairs Monitored:** BTC-USDT, ETH-USDT, BNB-USDT (configurable in `backend/signals.py`)
+- **Notification Format:** Formatted alerts sent to Telegram with:
+  - Signal type (BUY/SELL/HOLD) with emoji indicators
+  - Entry price, take profit, and stop loss levels
+  - Technical indicators (RSI, EMA12, EMA26)
+  - Confidence score based on multi-timeframe analysis
+  - Risk warning
+
 ## User Preferences
 - Backend-only API application (no frontend component)
-- Uses KuCoin API for cryptocurrency price data
+- Uses KuCoin API for cryptocurrency price data (real-time data, no mock values)
+- Multi-timeframe analysis (15min, 1hour, 4hour) for 70-80% accuracy target
+- Automatic signal generation every 15 minutes via APScheduler
 - Optional Telegram integration for notifications (requires environment variables)

@@ -371,6 +371,7 @@ def send_signal_to_telegram(signal_data: Dict):
         confidence = signal_data.get("confidence", 0)
         timestamp = signal_data.get("timestamp", "")
         reasons = signal_data.get("reasons", [])
+        timeframe_analysis = signal_data.get("timeframe_analysis", {})
         
         # Signal emoji
         signal_emoji = {
@@ -379,20 +380,27 @@ def send_signal_to_telegram(signal_data: Dict):
             "HOLD": "🟡"
         }.get(signal, "⚪")
         
-        # Format message
+        # Format message exactly as specified
         message = f"🚨 *Crypto Signal Alert*\n"
         message += f"Pair: `{symbol}`\n"
         message += f"Signal: {signal_emoji} *{signal}*\n"
-        message += f"Entry: `${current_price:,.6f}`\n"
-        
-        if rsi is not None:
-            message += f"RSI: `{rsi:.1f}`, EMA12: `{ema12:.2f}`, EMA26: `{ema26:.2f}`\n"
+        message += f"Entry: `${current_price:,.2f}`\n"
         
         if take_profit and stop_loss:
-            message += f"Take Profit: `${take_profit:,.6f}`\n"
-            message += f"Stop Loss: `${stop_loss:,.6f}`\n"
+            message += f"Take Profit: `${take_profit:,.2f}`\n"
+            message += f"Stop Loss: `${stop_loss:,.2f}`\n"
+        else:
+            message += f"Take Profit: N/A\n"
+            message += f"Stop Loss: N/A\n"
         
-        message += f"Confidence: `{confidence:.2f}` ({signal_data.get('timeframe_analysis', {}).get('bullish_timeframes', 0) if signal == 'BUY' else signal_data.get('timeframe_analysis', {}).get('bearish_timeframes', 0)} of {signal_data.get('timeframe_analysis', {}).get('total_timeframes', 0)} timeframes)\n"
+        if rsi is not None:
+            message += f"RSI: `{rsi:.1f}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`\n"
+        
+        # Show confidence based on timeframe agreement
+        matched_timeframes = max(timeframe_analysis.get('bullish_timeframes', 0), 
+                                timeframe_analysis.get('bearish_timeframes', 0))
+        total_timeframes = timeframe_analysis.get('total_timeframes', 3)
+        message += f"Confidence: `{confidence:.2f}` ({matched_timeframes}/{total_timeframes} timeframes matched)\n"
         message += f"Time: `{timestamp}`\n\n"
         
         if reasons:
@@ -404,10 +412,7 @@ def send_signal_to_telegram(signal_data: Dict):
         if "error" in signal_data:
             message += f"⚠️ *Error:* {signal_data['error']}\n\n"
         
-        message += f"⚠️ *RISK WARNING*\n"
-        message += f"• High-risk trading - use proper position sizing\n"
-        message += f"• Always do your own research (DYOR)\n"
-        message += f"• Past performance ≠ future results"
+        message += f"⚠️ *Risk Warning:* Always DYOR, trading is risky."
         
         send_telegram_message(message)
         
@@ -417,6 +422,25 @@ def send_signal_to_telegram(signal_data: Dict):
         error_msg += f"Error: `{str(e)}`\n"
         error_msg += f"Time: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
         send_telegram_message(error_msg)
+
+def generate_scheduled_signals():
+    """Generate signals for top crypto pairs - called by scheduler"""
+    print("📊 Generating scheduled signals...")
+    
+    # Generate signals for top pairs (limit to avoid rate limiting)
+    top_pairs = ["BTC-USDT", "ETH-USDT", "BNB-USDT"]
+    
+    for symbol in top_pairs:
+        try:
+            print(f"   Analyzing {symbol}...")
+            generate_signal(symbol, "1hour")
+            # Small delay to avoid overwhelming the API
+            import time
+            time.sleep(2)
+        except Exception as e:
+            print(f"   ❌ Error analyzing {symbol}: {e}")
+    
+    print("✅ Scheduled signal generation complete")
 
 # Compatibility functions for existing API
 def generate_single_signal(symbol: str, timeframe: str = "1hour", send_notification: bool = True) -> Dict:

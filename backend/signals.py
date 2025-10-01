@@ -1,11 +1,12 @@
 import requests
+import os
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-# 🔐 Telegram credentials (hardcoded)
-TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
-TELEGRAM_CHAT_ID = "7089989920"
+# 🔐 Telegram credentials (from environment variables)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # 🎯 Top cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [
@@ -33,6 +34,10 @@ def send_telegram_message(text: str):
 
 def _send_single_telegram_message(text: str):
     """Send a single Telegram message"""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram credentials not configured - skipping message")
+        return
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,

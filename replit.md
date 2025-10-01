@@ -48,15 +48,24 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
 - Optional Telegram bot integration for automated notifications
 - Multithreaded signal generation for batch processing
 
-## Recent Changes (GitHub Import Setup - Sept 20, 2025)
-- ✅ GitHub repository imported successfully to Replit environment
+## Recent Changes (GitHub Import Setup - October 1, 2025)
+- ✅ Fresh GitHub repository clone imported to Replit environment
 - ✅ Python 3.11 environment verified and uv package manager available  
-- ✅ Installed all dependencies via pyproject.toml using `uv sync`
-- ✅ Configured Backend API workflow running on port 8000 with proper host binding (0.0.0.0:8000)
+- ✅ All dependencies installed via pyproject.toml (fastapi, uvicorn, kucoin-python, etc.)
+- ✅ Backend API workflow running on port 8000 with proper host binding (0.0.0.0:8000)
 - ✅ Verified all API endpoints functional:
   - GET / - API information and health check ✅
-  - GET /api/signal - Real-time trading signals with BTC-USDT ✅
+  - GET /api/signal - Real-time trading signals (tested with BTC-USDT and ETH-USDT) ✅
   - GET /docs - Interactive API documentation (Swagger UI) available
-- ✅ Configured autoscale deployment for production (no port specified - handled by infrastructure)
+- ✅ Security enhancement: Moved Telegram credentials from hardcoded values to environment variables
+  - TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID now loaded from environment
+  - Graceful handling when credentials are not set
+- ✅ Created .gitignore for Python project (excludes __pycache__, .pythonlibs/, .env, etc.)
+- ✅ Configured autoscale deployment for production using uv and uvicorn
 - ✅ Application ready for use - all core functionality working
 - ✅ Import process completed successfully
+
+## User Preferences
+- Backend-only API application (no frontend component)
+- Uses KuCoin API for cryptocurrency price data
+- Optional Telegram integration for notifications (requires environment variables)

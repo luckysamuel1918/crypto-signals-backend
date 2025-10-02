@@ -1,19 +1,7 @@
 function getApiBaseUrl() {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return 'http://localhost:8000';
-    }
-    
-    if (hostname.includes('.repl.co') || hostname.includes('.replit.dev')) {
-        const parts = hostname.split('.');
-        const uuid = parts[0];
-        const rest = parts.slice(1).join('.');
-        return `${protocol}//${uuid}-8000.${rest}`;
-    }
-    
-    return `${protocol}//${hostname}:8000`;
+    // Use the same origin as the frontend since we have a proxy
+    // The frontend server (port 5000) will proxy /api/* requests to backend (port 8000)
+    return window.location.origin;
 }
 
 const API_BASE_URL = getApiBaseUrl();

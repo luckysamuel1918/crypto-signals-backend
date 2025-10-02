@@ -11,28 +11,15 @@ app = FastAPI(title="Lucky Signals Backend")
 app.include_router(routes_router, prefix="/api", tags=["signals"])
 
 # Global variables
-telegram_app = None
-telegram_task = None
 scheduler = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Telegram bot and scheduler on FastAPI startup"""
-    global telegram_app, telegram_task, scheduler
+    """Initialize scheduler on FastAPI startup"""
+    global scheduler
     
-    # Setup Telegram messaging
-    telegram_app = setup_telegram_bot()
-    if telegram_app:
-        print("🚀 Starting Telegram bot...")
-        try:
-            await telegram_app.initialize()
-            await telegram_app.start()
-            telegram_task = asyncio.create_task(telegram_app.updater.start_polling(drop_pending_updates=True))
-            print("✅ Telegram bot started successfully")
-        except Exception as e:
-            print(f"❌ Telegram bot startup error: {e}")
-    else:
-        print("⚠️ Telegram bot not initialized - check credentials")
+    # Setup Telegram messaging (direct API calls, no bot polling)
+    setup_telegram_bot()
     
     # Start APScheduler for automatic signal generation
     print("⏰ Starting signal scheduler...")
@@ -57,27 +44,14 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean shutdown of Telegram bot and scheduler"""
-    global telegram_app, telegram_task, scheduler
+    """Clean shutdown of scheduler"""
+    global scheduler
     
     # Shutdown scheduler
     if scheduler:
         print("🛑 Shutting down scheduler...")
         scheduler.shutdown()
         print("✅ Scheduler stopped")
-    
-    # Shutdown Telegram bot
-    if telegram_app:
-        print("🛑 Shutting down Telegram bot...")
-        try:
-            if telegram_task:
-                telegram_task.cancel()
-            await telegram_app.updater.stop()
-            await telegram_app.stop()
-            await telegram_app.shutdown()
-            print("✅ Telegram bot stopped")
-        except Exception as e:
-            print(f"Error stopping Telegram bot: {e}")
 
 @app.get("/")
 def root():

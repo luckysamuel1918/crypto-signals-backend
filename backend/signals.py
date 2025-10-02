@@ -4,10 +4,8 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-# 🔐 Telegram credentials - HARDCODED (Security Warning: These credentials are exposed in source code)
-# For better security, use environment variables instead
-TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
-TELEGRAM_CHAT_ID = "7089989920"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # 🎯 Top cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [
@@ -270,90 +268,60 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
         total_timeframes = len(valid_analyses)
         confidence = max(bullish_count, bearish_count) / total_timeframes
         
-        # Determine signal based on strict rules for 70-80% accuracy
+        # Determine signal based on less strict rules for more realistic BUY/SELL trades
         signal = "HOLD"
         signal_reasons = []
         entry_price = current_price
         
-        # BUY Signal Rules (Improved for higher accuracy):
-        # - RSI < 35 (oversold - strong buy signal)
-        # - EMA12 > EMA26 (bullish trend)
-        # - At least 2 timeframes agree (confidence >= 0.67)
+        # Calculate EMA difference percentage
+        ema_diff_pct = ((ema12 - ema26) / ema26) * 100 if ema26 != 0 else 0
+        
+        # BUY Signal Rules:
+        # - RSI < 45
+        # - EMA12 > EMA26 by at least 0.1%
+        # - At least 2 out of 3 timeframes confirm bullish trend
         if (bullish_count >= 2 and 
-            rsi is not None and rsi < 35 and 
-            ema12 > ema26):
+            rsi is not None and rsi < 45 and 
+            ema_diff_pct >= 0.1):
             signal = "BUY"
-            # Entry price: slightly below current price (0.2% lower for better entry)
-            entry_price = current_price * 0.998
-            signal_reasons.append(f"Strong oversold RSI ({rsi:.1f} < 35)")
-            signal_reasons.append(f"Bullish EMA crossover (EMA12 > EMA26)")
+            entry_price = current_price
+            signal_reasons.append(f"RSI indicates buying opportunity ({rsi:.1f} < 45)")
+            signal_reasons.append(f"Bullish EMA trend (EMA12 > EMA26 by {ema_diff_pct:.2f}%)")
             signal_reasons.append(f"{bullish_count}/{total_timeframes} timeframes confirm bullish trend")
         
-        # SELL Signal Rules (Improved for higher accuracy):
-        # - RSI > 70 (overbought - strong sell signal)
-        # - EMA12 < EMA26 (bearish trend)
-        # - At least 2 timeframes agree (confidence >= 0.67)
+        # SELL Signal Rules:
+        # - RSI > 55
+        # - EMA12 < EMA26 by at least 0.1%
+        # - At least 2 out of 3 timeframes confirm bearish trend
         elif (bearish_count >= 2 and 
-              rsi is not None and rsi > 70 and 
-              ema12 < ema26):
-            signal = "SELL"
-            # Entry price: slightly above current price (0.2% higher for better entry)
-            entry_price = current_price * 1.002
-            signal_reasons.append(f"Strong overbought RSI ({rsi:.1f} > 70)")
-            signal_reasons.append(f"Bearish EMA crossover (EMA12 < EMA26)")
-            signal_reasons.append(f"{bearish_count}/{total_timeframes} timeframes confirm bearish trend")
-        
-        # Alternative BUY signal (moderate confidence):
-        # - RSI < 45 and bullish trend across all timeframes
-        elif (bullish_count == total_timeframes and 
-              rsi is not None and rsi < 45 and 
-              ema12 > ema26):
-            signal = "BUY"
-            entry_price = current_price * 0.998
-            signal_reasons.append(f"Moderate oversold RSI ({rsi:.1f})")
-            signal_reasons.append(f"Strong bullish consensus ({bullish_count}/{total_timeframes} timeframes)")
-            signal_reasons.append(f"EMA12 ({ema12:.2f}) > EMA26 ({ema26:.2f})")
-        
-        # Alternative SELL signal (moderate confidence):
-        # - RSI > 55 and bearish trend across all timeframes
-        elif (bearish_count == total_timeframes and 
               rsi is not None and rsi > 55 and 
-              ema12 < ema26):
+              ema_diff_pct <= -0.1):
             signal = "SELL"
-            entry_price = current_price * 1.002
-            signal_reasons.append(f"Moderate overbought RSI ({rsi:.1f})")
-            signal_reasons.append(f"Strong bearish consensus ({bearish_count}/{total_timeframes} timeframes)")
-            signal_reasons.append(f"EMA12 ({ema12:.2f}) < EMA26 ({ema26:.2f})")
+            entry_price = current_price
+            signal_reasons.append(f"RSI indicates selling opportunity ({rsi:.1f} > 55)")
+            signal_reasons.append(f"Bearish EMA trend (EMA12 < EMA26 by {abs(ema_diff_pct):.2f}%)")
+            signal_reasons.append(f"{bearish_count}/{total_timeframes} timeframes confirm bearish trend")
         
         else:
             signal = "HOLD"
             signal_reasons.append("Conditions not met for BUY/SELL signal")
             if rsi is not None:
-                if rsi >= 70:
-                    signal_reasons.append(f"RSI overbought ({rsi:.1f}) but trend not confirmed")
-                elif rsi <= 35:
-                    signal_reasons.append(f"RSI oversold ({rsi:.1f}) but trend not confirmed")
-                else:
-                    signal_reasons.append(f"RSI neutral ({rsi:.1f})")
-            if bullish_count < 2 and bearish_count < 2:
-                signal_reasons.append("Mixed signals across timeframes - waiting for clarity")
+                signal_reasons.append(f"RSI: {rsi:.1f} (BUY if < 45, SELL if > 55)")
+            signal_reasons.append(f"EMA difference: {ema_diff_pct:.2f}% (need ≥0.1% for BUY or ≤-0.1% for SELL)")
+            signal_reasons.append(f"Timeframe consensus: {bullish_count} bullish, {bearish_count} bearish (need ≥2 in same direction)")
         
-        # Calculate Risk Management levels with 1:2 minimum risk/reward ratio
-        # Using ATR for volatility-based stop loss and take profit
+        # Calculate Risk Management levels with fixed percentages
+        # For BUY: Take Profit +1.5%, Stop Loss -1%
+        # For SELL: Take Profit -1.5%, Stop Loss +1%
         take_profit = None
         stop_loss = None
         
-        if atr is not None and signal in ["BUY", "SELL"]:
-            if signal == "BUY":
-                # Stop loss: 1.5x ATR below entry (risk)
-                stop_loss = round(entry_price - (1.5 * atr), 6)
-                # Take profit: 3x ATR above entry (reward) = 1:2 risk/reward ratio
-                take_profit = round(entry_price + (3 * atr), 6)
-            else:  # SELL
-                # Stop loss: 1.5x ATR above entry (risk)
-                stop_loss = round(entry_price + (1.5 * atr), 6)
-                # Take profit: 3x ATR below entry (reward) = 1:2 risk/reward ratio
-                take_profit = round(entry_price - (3 * atr), 6)
+        if signal == "BUY":
+            take_profit = round(entry_price * 1.015, 6)  # +1.5%
+            stop_loss = round(entry_price * 0.99, 6)  # -1%
+        elif signal == "SELL":
+            take_profit = round(entry_price * 0.985, 6)  # -1.5%
+            stop_loss = round(entry_price * 1.01, 6)  # +1%
         
         # Only send signals with confidence >= 0.70 (at least 2/3 timeframes agree)
         should_send_telegram = confidence >= 0.70
@@ -427,39 +395,37 @@ def send_signal_to_telegram(signal_data: Dict):
             "HOLD": "🟡"
         }.get(signal, "⚪")
         
-        # Format message exactly as specified by user
-        message = f"🚨 *Crypto Signal Alert*\n"
-        message += f"Pair: `{symbol}`\n"
-        message += f"Signal: {signal_emoji} *{signal}*\n"
-        message += f"Entry: `${entry_price:,.2f}`\n"
+        # Format message according to user specifications
+        message = f"🚨 Crypto Signal Alert\n"
+        message += f"Pair: {symbol}\n"
+        message += f"Signal: {signal_emoji} {signal}\n"
+        message += f"Entry: ${entry_price:,.2f}\n"
         
+        # Calculate and display percentage changes
         if take_profit and stop_loss:
-            message += f"Take Profit: `${take_profit:,.2f}`\n"
-            message += f"Stop Loss: `${stop_loss:,.2f}`\n"
+            if signal == "BUY":
+                tp_pct = ((take_profit - entry_price) / entry_price) * 100
+                sl_pct = ((stop_loss - entry_price) / entry_price) * 100
+                message += f"Take Profit: ${take_profit:,.2f} (+{tp_pct:.1f}%)\n"
+                message += f"Stop Loss: ${stop_loss:,.2f} ({sl_pct:.1f}%)\n"
+            elif signal == "SELL":
+                tp_pct = ((entry_price - take_profit) / entry_price) * 100
+                sl_pct = ((stop_loss - entry_price) / entry_price) * 100
+                message += f"Take Profit: ${take_profit:,.2f} (−{tp_pct:.1f}%)\n"
+                message += f"Stop Loss: ${stop_loss:,.2f} (+{sl_pct:.1f}%)\n"
         else:
             message += f"Take Profit: N/A\n"
             message += f"Stop Loss: N/A\n"
         
-        if rsi is not None:
-            message += f"RSI: `{rsi:.1f}` | EMA12: `{ema12:.2f}` | EMA26: `{ema26:.2f}`\n"
+        if rsi is not None and ema12 is not None and ema26 is not None:
+            message += f"RSI: {rsi:.1f} | EMA12: {ema12:,.2f} | EMA26: {ema26:,.2f}\n"
         
         # Show confidence based on timeframe agreement
         matched_timeframes = max(timeframe_analysis.get('bullish_timeframes', 0), 
                                 timeframe_analysis.get('bearish_timeframes', 0))
         total_timeframes = timeframe_analysis.get('total_timeframes', 3)
-        message += f"Confidence: `{confidence:.2f}` ({matched_timeframes}/{total_timeframes} timeframes matched)\n"
-        message += f"Time: `{timestamp}`\n\n"
-        
-        if reasons:
-            message += f"📊 *Analysis:*\n"
-            for reason in reasons[:3]:  # Limit to first 3 reasons to keep message concise
-                message += f"• {reason}\n"
-            message += "\n"
-        
-        if "error" in signal_data:
-            message += f"⚠️ *Error:* {signal_data['error']}\n\n"
-        
-        message += f"⚠️ *Risk Warning:* Always DYOR, trading is risky."
+        message += f"Confidence: {matched_timeframes}/{total_timeframes} timeframes matched\n"
+        message += f"Time: {timestamp}"
         
         send_telegram_message(message)
         

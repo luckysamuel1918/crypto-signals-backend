@@ -50,6 +50,24 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
 
 ## Recent Changes
 
+### Fresh GitHub Import - October 2, 2025
+- ✅ **Repository re-imported from GitHub**
+  - This is a fresh clone of the GitHub repository
+  - Fixed security vulnerability: Removed hardcoded Telegram credentials from source code
+  - All credentials now properly loaded from environment variables
+  - Application continues to function without Telegram credentials configured
+- ✅ **Verified Application Functionality:**
+  - Backend API running correctly on port 8000
+  - Frontend running correctly on port 5000
+  - Both workflows configured and operational
+  - All API endpoints tested and working
+- ✅ **Updated Signal Generation Rules (Less Strict, More Realistic):**
+  - **RSI Thresholds:** BUY if RSI < 45, SELL if RSI > 55, HOLD otherwise
+  - **EMA Logic:** BUY if EMA12 > EMA26 by ≥0.1%, SELL if EMA12 < EMA26 by ≥0.1%
+  - **Confidence Filter:** Triggers BUY/SELL if at least 2 out of 3 timeframes confirm same direction
+  - **Fixed Risk Management:** BUY (TP: +1.5%, SL: -1%), SELL (TP: -1.5%, SL: +1%)
+  - **Updated Telegram Format:** Cleaner message format showing pair, entry, TP/SL with percentages, RSI, EMAs, confidence as "X/3 timeframes matched"
+
 ### Signal Accuracy Improvements - October 2, 2025
 - ✅ **Improved Signal Generation Logic for 70-80% Accuracy:**
   - Stricter RSI thresholds: RSI < 35 for BUY signals, RSI > 70 for SELL signals
@@ -57,11 +75,10 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
   - Entry price optimization: BUY entry 0.2% below current, SELL entry 0.2% above current
   - Enhanced risk management: 1:2 minimum risk/reward ratio using ATR
   - Confidence-based notifications: Only sends Telegram alerts when confidence >= 0.70
-- ✅ **Telegram Integration Hardcoded:**
-  - Credentials now hardcoded directly in backend/signals.py for automatic operation
-  - Bot Token: 7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk
-  - Chat ID: 7089989920
-  - ⚠️ Security Note: Credentials exposed in source code per requirement
+- ✅ **Telegram Integration Setup:**
+  - Credentials loaded from environment variables (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+  - Graceful handling when credentials are not configured
+  - Application continues to work without Telegram credentials, notifications are just skipped
 - ✅ **Frontend-Backend Connection Fixed:**
   - Implemented proxy server in server.py to route /api/* requests to backend
   - Fixed "Failed to fetch" errors by routing all traffic through port 5000

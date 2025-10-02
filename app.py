@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from backend.routes import router as routes_router
 from backend.signals import setup_telegram_bot, generate_scheduled_signals
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -6,6 +7,14 @@ import asyncio
 import os
 
 app = FastAPI(title="Lucky Signals Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register routes
 app.include_router(routes_router, prefix="/api", tags=["signals"])
@@ -37,10 +46,7 @@ async def startup_event():
     
     scheduler.start()
     print("✅ Scheduler started - signals will be generated every 15 minutes")
-    
-    # Generate signals immediately on startup
-    print("🚀 Generating initial signals...")
-    generate_scheduled_signals()
+    print("📊 First signal generation will occur in 1 minute...")
 
 @app.on_event("shutdown")
 async def shutdown_event():

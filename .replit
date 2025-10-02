@@ -16,31 +16,39 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "Frontend"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "Backend API"
+
+[[workflows.workflow]]
+name = "Frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python server.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow]]
 name = "Backend API"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uv run uvicorn app:app --host 0.0.0.0 --port 8000"
 waitForPort = 8000
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 8000
-externalPort = 8000
-
-[[ports]]
-localPort = 34531
-externalPort = 3003
 
 [[ports]]
 localPort = 35813
@@ -49,6 +57,10 @@ externalPort = 3002
 [[ports]]
 localPort = 36583
 externalPort = 3000
+
+[[ports]]
+localPort = 39331
+externalPort = 3003
 
 [[ports]]
 localPort = 44113

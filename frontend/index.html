@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky Signals - Crypto Trading Signals</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Lucky Signals</h1>
+            <p class="subtitle">Real-time Cryptocurrency Trading Signals</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="symbol">Trading Pair:</label>
+                <select id="symbol">
+                    <option value="BTC-USDT">BTC-USDT</option>
+                    <option value="ETH-USDT">ETH-USDT</option>
+                    <option value="BNB-USDT">BNB-USDT</option>
+                    <option value="XRP-USDT">XRP-USDT</option>
+                    <option value="ADA-USDT">ADA-USDT</option>
+                    <option value="DOGE-USDT">DOGE-USDT</option>
+                    <option value="SOL-USDT">SOL-USDT</option>
+                    <option value="MATIC-USDT">MATIC-USDT</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="timeframe">Timeframe:</label>
+                <select id="timeframe">
+                    <option value="15min">15 Minutes</option>
+                    <option value="1hour" selected>1 Hour</option>
+                    <option value="4hour">4 Hours</option>
+                    <option value="1day">1 Day</option>
+                </select>
+            </div>
+
+            <button id="getSignal" class="btn-primary">Get Signal</button>
+            <button id="autoRefresh" class="btn-secondary">Auto Refresh: OFF</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing market data...</p>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="signalCard" class="signal-card" style="display: none;">
+            <div class="signal-header">
+                <h2 id="signalSymbol"></h2>
+                <div id="signalBadge" class="signal-badge"></div>
+            </div>
+
+            <div class="price-section">
+                <div class="price-item">
+                    <span class="label">Current Price</span>
+                    <span id="currentPrice" class="value"></span>
+                </div>
+                <div class="price-item">
+                    <span class="label">Take Profit</span>
+                    <span id="takeProfit" class="value"></span>
+                </div>
+                <div class="price-item">
+                    <span class="label">Stop Loss</span>
+                    <span id="stopLoss" class="value"></span>
+                </div>
+            </div>
+
+            <div class="indicators-section">
+                <h3>Technical Indicators</h3>
+                <div class="indicators-grid">
+                    <div class="indicator">
+                        <span class="indicator-label">RSI (14)</span>
+                        <span id="rsi" class="indicator-value"></span>
+                    </div>
+                    <div class="indicator">
+                        <span class="indicator-label">EMA (12)</span>
+                        <span id="ema12" class="indicator-value"></span>
+                    </div>
+                    <div class="indicator">
+                        <span class="indicator-label">EMA (26)</span>
+                        <span id="ema26" class="indicator-value"></span>
+                    </div>
+                    <div class="indicator">
+                        <span class="indicator-label">ATR (14)</span>
+                        <span id="atr" class="indicator-value"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analysis-section">
+                <h3>Multi-Timeframe Analysis</h3>
+                <div id="timeframeAnalysis" class="timeframe-analysis"></div>
+                <div class="confidence-bar">
+                    <span class="label">Confidence</span>
+                    <div class="progress-bar">
+                        <div id="confidenceBar" class="progress-fill"></div>
+                        <span id="confidenceText" class="progress-text"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reasons-section">
+                <h3>Analysis Reasons</h3>
+                <ul id="reasonsList"></ul>
+            </div>
+
+            <div class="timestamp">
+                <span id="timestamp"></span>
+            </div>
+
+            <div class="warning">
+                ⚠️ <strong>Risk Warning:</strong> Trading cryptocurrencies involves substantial risk of loss. Signals are for educational purposes only. Always do your own research and never invest more than you can afford to lose.
+            </div>
+        </div>
+
+        <footer>
+            <p>Data Source: KuCoin API | Indicators: RSI-14, EMA-12, EMA-26</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

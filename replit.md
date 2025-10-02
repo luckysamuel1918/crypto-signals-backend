@@ -102,8 +102,25 @@ The application supports automatic Telegram notifications for trading signals. T
   - Confidence score based on multi-timeframe analysis
   - Risk warning
 
+## Frontend (New)
+- Simple, modern web interface for viewing trading signals
+- Located in `frontend/` directory with HTML, CSS, and JavaScript
+- Served on port 5000 via Python HTTP server (`server.py`)
+- Features:
+  - Real-time signal display for multiple trading pairs
+  - Trading pair selector (BTC-USDT, ETH-USDT, BNB-USDT, etc.)
+  - Timeframe selector (15min, 1hour, 4hour, 1day)
+  - Auto-refresh functionality (30-second intervals)
+  - Clean dark theme with gradient styling
+  - Responsive design for mobile and desktop
+  - Live technical indicators (RSI, EMA12, EMA26, ATR)
+  - Multi-timeframe analysis visualization
+  - Confidence scoring display
+- Frontend fetches data from backend API on port 8000
+- CORS enabled on backend to allow cross-origin requests
+
 ## User Preferences
-- Backend-only API application (no frontend component)
+- Full-stack application with backend API and web frontend
 - Uses KuCoin API for cryptocurrency price data (real-time data, no mock values)
 - Multi-timeframe analysis (15min, 1hour, 4hour) for 70-80% accuracy target
 - Automatic signal generation every 15 minutes via APScheduler

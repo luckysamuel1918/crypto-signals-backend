@@ -7,14 +7,17 @@ function getApiBaseUrl() {
     }
     
     if (hostname.includes('.repl.co') || hostname.includes('.replit.dev')) {
-        const replitBaseHost = hostname.replace(/^.*?-/, '');
-        return `${protocol}//8000-${replitBaseHost}`;
+        const parts = hostname.split('.');
+        const uuid = parts[0];
+        const rest = parts.slice(1).join('.');
+        return `${protocol}//${uuid}-8000.${rest}`;
     }
     
     return `${protocol}//${hostname}:8000`;
 }
 
 const API_BASE_URL = getApiBaseUrl();
+console.log('API_BASE_URL:', API_BASE_URL);
 
 let autoRefreshInterval = null;
 let isAutoRefresh = false;

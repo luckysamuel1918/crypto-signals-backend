@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "web", "nodejs-20"]
 
 [nix]
 channel = "stable-25_05"
@@ -51,20 +51,12 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 35813
-externalPort = 3002
+localPort = 8000
+externalPort = 8000
 
 [[ports]]
-localPort = 36583
+localPort = 42469
 externalPort = 3000
-
-[[ports]]
-localPort = 39331
-externalPort = 3003
-
-[[ports]]
-localPort = 44113
-externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"

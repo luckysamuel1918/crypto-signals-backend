@@ -284,37 +284,37 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
         total_timeframes = len(valid_analyses)
         confidence = max(bullish_count, bearish_count) / total_timeframes
         
-        # Simplified signal logic - BUY if RSI < 50 and EMA12 > EMA26, SELL if RSI > 50 and EMA12 < EMA26
+        # Updated signal logic - BUY if EMA12 > EMA26 and RSI > 50, SELL if EMA12 < EMA26 and RSI < 50
         signal = "HOLD"
         signal_reasons = []
         entry_price = current_price
         
-        # BUY Signal: RSI < 50 and EMA12 > EMA26
-        if rsi is not None and rsi < 50 and ema12 > ema26:
+        # BUY Signal: EMA12 > EMA26 and RSI > 50
+        if rsi is not None and ema12 > ema26 and rsi > 50:
             signal = "BUY"
             entry_price = current_price
-            signal_reasons.append(f"RSI below 50 ({rsi:.1f} < 50)")
             signal_reasons.append(f"Bullish EMA trend (EMA12 {ema12:,.2f} > EMA26 {ema26:,.2f})")
+            signal_reasons.append(f"RSI above 50 ({rsi:.1f} > 50) - bullish momentum")
             signal_reasons.append(f"{bullish_count}/{total_timeframes} timeframes confirm bullish trend")
-            print(f"✅ BUY Signal Generated: RSI={rsi:.1f}, EMA12={ema12:,.2f}, EMA26={ema26:,.2f}")
+            print(f"✅ BUY Signal Generated: EMA12={ema12:,.2f} > EMA26={ema26:,.2f}, RSI={rsi:.1f} > 50")
         
-        # SELL Signal: RSI > 50 and EMA12 < EMA26
-        elif rsi is not None and rsi > 50 and ema12 < ema26:
+        # SELL Signal: EMA12 < EMA26 and RSI < 50
+        elif rsi is not None and ema12 < ema26 and rsi < 50:
             signal = "SELL"
             entry_price = current_price
-            signal_reasons.append(f"RSI above 50 ({rsi:.1f} > 50)")
             signal_reasons.append(f"Bearish EMA trend (EMA12 {ema12:,.2f} < EMA26 {ema26:,.2f})")
+            signal_reasons.append(f"RSI below 50 ({rsi:.1f} < 50) - bearish momentum")
             signal_reasons.append(f"{bearish_count}/{total_timeframes} timeframes confirm bearish trend")
-            print(f"✅ SELL Signal Generated: RSI={rsi:.1f}, EMA12={ema12:,.2f}, EMA26={ema26:,.2f}")
+            print(f"✅ SELL Signal Generated: EMA12={ema12:,.2f} < EMA26={ema26:,.2f}, RSI={rsi:.1f} < 50")
         
-        # HOLD: Both conditions fail
+        # HOLD: Conditions not met
         else:
             signal = "HOLD"
             if rsi is not None:
-                signal_reasons.append(f"RSI: {rsi:.1f} (BUY if < 50, SELL if > 50)")
-            signal_reasons.append(f"EMA12: ${ema12:,.2f}, EMA26: ${ema26:,.2f} (BUY if EMA12 > EMA26, SELL if EMA12 < EMA26)")
-            signal_reasons.append("Conditions not met for BUY or SELL")
-            print(f"⏸️ HOLD Signal: RSI={rsi:.1f}, EMA12={ema12:,.2f}, EMA26={ema26:,.2f}")
+                signal_reasons.append(f"RSI: {rsi:.1f} (neutral around 50)")
+            signal_reasons.append(f"EMA12: ${ema12:,.2f}, EMA26: ${ema26:,.2f}")
+            signal_reasons.append("Conditions not met: BUY needs EMA12 > EMA26 AND RSI > 50, SELL needs EMA12 < EMA26 AND RSI < 50")
+            print(f"⏸️ HOLD Signal: EMA12={ema12:,.2f}, EMA26={ema26:,.2f}, RSI={rsi:.1f}")
         
         # Calculate Risk Management levels with fixed percentages
         # For BUY: Take Profit +1.5%, Stop Loss -1%

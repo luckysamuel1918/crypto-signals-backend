@@ -4,8 +4,8 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from backend.kucoin_service import get_ticker_price, fetch_klines
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = "7160932182:AAGAv_yyOQSOaKNxMCPmw3Bmtpt-9EvJpPk"
+TELEGRAM_CHAT_ID = "7089989920"
 
 # 🎯 Top cryptocurrency pairs for signal generation
 CRYPTO_PAIRS = [

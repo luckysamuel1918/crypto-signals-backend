@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routes import router as routes_router
+from backend.routes import router as routes_router, set_signal_engine
 from backend.signals import setup_telegram_bot, generate_scheduled_signals
 from backend.websocket_manager import WebSocketPriceManager
 from backend.realtime_signal_engine import RealtimeSignalEngine
@@ -51,7 +51,15 @@ async def startup_event():
     
     # Initialize Real-Time Signal Engine (with execution manager)
     print("🎯 Initializing Real-Time Signal Engine...")
-    signal_engine = RealtimeSignalEngine(ws_manager, execution_manager)
+    
+    # Get signal lead time from environment (default 30 seconds)
+    signal_lead_time = int(os.getenv("SIGNAL_LEAD_TIME", "30"))
+    print(f"⚡ Pre-signal lead time: {signal_lead_time} seconds")
+    
+    signal_engine = RealtimeSignalEngine(ws_manager, execution_manager, signal_lead_time=signal_lead_time)
+    
+    # Set signal engine reference for API routes
+    set_signal_engine(signal_engine)
     
     # Start monitoring top crypto pairs
     print("\n📊 Starting real-time monitoring for top pairs...")
@@ -85,6 +93,7 @@ async def startup_event():
     print("🔌 WebSocket: Active with REST API fallback")
     print("⚡ Execution: Instant with ±0.2% price tolerance")
     print("⏱️ Delay Check: Skip if > 2 seconds")
+    print(f"🔮 Pre-Signal Alerts: {signal_lead_time}s lead time (≥90% confidence)")
     print("="*60 + "\n")
 
 @app.on_event("shutdown")
@@ -108,11 +117,17 @@ async def shutdown_event():
 
 @app.get("/")
 def root():
+    # Get current lead time if signal engine is initialized
+    lead_time = signal_engine.signal_lead_time if signal_engine else 30
+    
     return {
         "message": "Lucky Signals Backend - Real-Time Trading Signals API",
-        "version": "3.0.0 - Real-Time Edition",
+        "version": "4.0.0 - Pre-Signal Alerts Edition",
         "endpoints": {
             "/api/signal": "Get trading signal for a symbol",
+            "/api/stats/predictions": "Get pre-signal prediction accuracy stats",
+            "/api/settings/lead-time": "Get/Update signal lead time (GET/POST)",
+            "/api/active-signals": "Get currently active signals",
             "/docs": "API documentation"
         },
         "features": {
@@ -120,9 +135,15 @@ def root():
             "execution": "Instant order execution with ±0.2% price tolerance",
             "delay_check": "Skip signals if delay > 2 seconds",
             "fallback": "Automatic REST API fallback if WebSocket fails",
-            "async_processing": "Parallel processing for faster signal generation"
+            "async_processing": "Parallel processing for faster signal generation",
+            "pre_signal_alerts": f"Early warning {lead_time}s before signal triggers (≥90% confidence)"
         },
         "monitored_pairs": ["BTC-USDT", "ETH-USDT", "BNB-USDT"],
+        "pre_signal_config": {
+            "lead_time_seconds": lead_time,
+            "min_confidence": "90%",
+            "configurable": "Set SIGNAL_LEAD_TIME env var (20-60s)"
+        },
         "disclaimer": "⚠️ RISK WARNING: Trading cryptocurrencies involves substantial risk of loss. Signals are for educational purposes only. Always do your own research and never invest more than you can afford to lose.",
         "data_source": "KuCoin API (WebSocket + REST)",
         "indicators": ["RSI-14", "EMA-12", "EMA-26"]

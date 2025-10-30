@@ -50,6 +50,41 @@ This is a FastAPI backend application that provides cryptocurrency trading signa
 
 ## Recent Changes
 
+### Pre-Signal Alert System - October 30, 2025
+- ✅ **Implemented predictive pre-signal alerts:**
+  - Alerts sent 20-60 seconds before entry price is hit (configurable lead time)
+  - Machine learning-based prediction using price velocity, RSI momentum, and EMA convergence
+  - Only high-confidence setups (≥90%) trigger pre-alerts to avoid false signals
+  - Separate Telegram message format for pre-signals vs confirmed signals
+- ✅ **Configurable alert timing:**
+  - Default: 30 seconds lead time
+  - Configurable via `SIGNAL_LEAD_TIME` environment variable (20-60s range)
+  - API endpoint: `POST /api/settings/lead-time` to update dynamically
+  - API endpoint: `GET /api/settings/lead-time` to check current setting
+- ✅ **Prediction accuracy tracking:**
+  - Logs both pre-signal and confirmed signal timing
+  - Calculates prediction accuracy (estimated vs actual time to trigger)
+  - API endpoint: `GET /api/stats/predictions` for accuracy statistics
+  - Console logging shows prediction errors for tuning
+- ✅ **Pre-signal message format:**
+  - 🚨 Pre-Signal Alert header with signal type
+  - Current price vs expected entry price
+  - Estimated time until signal triggers (~Xs)
+  - Signal direction (BUY/SELL) with confidence percentage
+  - Full technical indicators (RSI, EMA12, EMA26)
+  - Countdown timer for manual trade execution
+- ✅ **Smart prediction logic:**
+  - Tracks price velocity to estimate entry price movement
+  - Monitors RSI momentum to predict crossover timing
+  - Calculates EMA convergence rate for trend reversal prediction
+  - Filters out unrealistic predictions (too fast/too slow)
+  - Anti-spam protection: Won't send duplicate pre-signals within 2 minutes
+- ✅ **New API endpoints:**
+  - `GET /api/stats/predictions` - View prediction accuracy statistics
+  - `GET /api/settings/lead-time` - Get current lead time configuration
+  - `POST /api/settings/lead-time?seconds=30` - Update lead time (20-60s)
+  - `GET /api/active-signals` - View currently active signals
+
 ### Real-Time WebSocket Trading System - October 30, 2025
 - ✅ **Upgraded from REST API polling to real-time WebSocket streaming:**
   - Implemented WebSocketPriceManager with KuCoin WebSocket integration

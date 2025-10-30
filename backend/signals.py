@@ -178,18 +178,126 @@ def calculate_atr(ohlcv_data: List[Dict], period: int = 14) -> Optional[float]:
     atr = sum(true_ranges[-period:]) / period
     return round(atr, 6)
 
+def estimate_next_candle_open(ohlcv_data: List[Dict], atr: Optional[float] = None) -> float:
+    """
+    Estimate the next candle's open price based on the last closed candle's close.
+    For most accurate entry calculations, we assume next candle opens at the last close.
+    
+    Args:
+        ohlcv_data: List of OHLCV candles (closed candles only)
+        atr: Average True Range (optional) for volatility-based adjustment
+    
+    Returns:
+        Estimated next candle open price
+    """
+    if not ohlcv_data or len(ohlcv_data) < 1:
+        raise ValueError("Need at least 1 closed candle to estimate next open")
+    
+    last_candle = ohlcv_data[-1]
+    last_close = last_candle['close']
+    
+    # Next candle typically opens at or very near the previous candle's close
+    # In a continuous market like crypto, this is the best estimate
+    return last_close
+
+def calculate_entry_price_and_order_type(
+    last_candle_close: float,
+    live_ticker_price: Optional[float] = None,
+    signal_type: str = "BUY",
+    slippage_limit: float = 0.002,  # 0.2% default
+    slippage_buffer: float = 0.0005  # 0.05% default buffer
+) -> Dict:
+    """
+    Calculate optimal entry price and recommend order type (MARKET or LIMIT).
+    
+    Rules:
+    1. Estimate next_candle_open (usually = last_candle_close in crypto)
+    2. If live_ticker_price is within slippage_limit of next_candle_open:
+       - Use live_ticker_price as entry
+       - Recommend MARKET order (can fill immediately)
+    3. Otherwise:
+       - Set entry to next_candle_open_estimate
+       - Recommend LIMIT order at that price
+    4. Add slippage_buffer to avoid being "behind the market"
+    
+    Args:
+        last_candle_close: Close price of the last completed candle
+        live_ticker_price: Current live market price (optional)
+        signal_type: "BUY" or "SELL"
+        slippage_limit: Maximum allowed slippage (default 0.2%)
+        slippage_buffer: Small buffer to add to entries (default 0.05%)
+    
+    Returns:
+        Dict with entry, order_type, entry_time_source, slippage_used
+    """
+    # Estimate next candle open (in crypto, this is typically the last close)
+    next_candle_open_estimate = last_candle_close
+    
+    # Default values
+    entry_price = next_candle_open_estimate
+    order_type = "LIMIT"
+    entry_time_source = "next_open_estimate"
+    slippage_used = slippage_buffer
+    
+    # If we have live ticker price, compare it
+    if live_ticker_price is not None:
+        # Calculate slippage percentage
+        slippage_pct = abs((live_ticker_price - next_candle_open_estimate) / next_candle_open_estimate)
+        
+        if slippage_pct <= slippage_limit:
+            # Live price is close enough - use it for MARKET order
+            entry_price = live_ticker_price
+            order_type = "MARKET"
+            entry_time_source = "live_ticker"
+            slippage_used = slippage_pct
+        else:
+            # Live price too far - use next_candle_open estimate for LIMIT order
+            entry_price = next_candle_open_estimate
+            order_type = "LIMIT"
+            entry_time_source = "next_open_estimate"
+            slippage_used = slippage_buffer
+    
+    # Apply slippage buffer to avoid being "behind the market"
+    if signal_type == "BUY":
+        # For BUY: Add buffer to entry (pay slightly more to ensure fill)
+        entry_price = entry_price * (1 + slippage_buffer)
+    elif signal_type == "SELL":
+        # For SELL: Subtract buffer from entry (sell slightly lower to ensure fill)
+        entry_price = entry_price * (1 - slippage_buffer)
+    
+    return {
+        "entry": round(entry_price, 6),
+        "order_type": order_type,
+        "entry_time_source": entry_time_source,
+        "slippage_used": round(slippage_used * 100, 4),  # Convert to percentage
+        "next_candle_open_estimate": round(next_candle_open_estimate, 6),
+        "live_ticker_price": round(live_ticker_price, 6) if live_ticker_price else None
+    }
+
 def analyze_timeframe(symbol: str, timeframe: str) -> Dict:
-    """Analyze a single timeframe and return indicators"""
+    """
+    Analyze a single timeframe and return indicators.
+    
+    IMPORTANT: Uses only CLOSED candles for indicator calculations.
+    The fetch_klines function already excludes the latest forming candle,
+    but we explicitly document this behavior here.
+    """
     try:
+        # Get OHLCV data (already excludes the latest forming candle in fetch_klines)
         ohlcv_data = get_ohlcv_data(symbol, timeframe, limit=100)
         if not ohlcv_data or len(ohlcv_data) < 50:
             return {"error": f"Insufficient data for {timeframe}"}
         
-        # Extract close prices
-        closes = [candle['close'] for candle in ohlcv_data]
-        current_price = closes[-1]
+        # RULE: Use only closed candles for indicator calculations
+        # fetch_klines already excludes the latest candle, so ohlcv_data contains only closed candles
+        # If we wanted to be extra explicit, we would do: ohlcv_data = ohlcv_data[:-1]
+        # But that's redundant since fetch_klines already handles this
         
-        # Calculate EMAs
+        # Extract close prices from closed candles only
+        closes = [candle['close'] for candle in ohlcv_data]
+        last_candle_close = closes[-1]  # This is the close of the LAST CLOSED candle
+        
+        # Calculate EMAs on closed candles only
         ema12_values = calculate_ema(closes, 12)
         ema26_values = calculate_ema(closes, 26)
         
@@ -199,38 +307,54 @@ def analyze_timeframe(symbol: str, timeframe: str) -> Dict:
         ema12 = ema12_values[-1]
         ema26 = ema26_values[-1]
         
-        # Calculate RSI
+        # Calculate RSI on closed candles only
         rsi = calculate_rsi(closes, 14)
         
-        # Calculate ATR
+        # Calculate ATR on closed candles only
         atr = calculate_atr(ohlcv_data, 14)
         
-        # Determine trend
+        # Determine trend based on closed candle indicators
         trend = "BULLISH" if ema12 > ema26 else "BEARISH"
         
         return {
             "timeframe": timeframe,
-            "current_price": current_price,
+            "last_candle_close": last_candle_close,  # Renamed from current_price for clarity
             "ema12": round(ema12, 6),
             "ema26": round(ema26, 6),
             "rsi": rsi,
             "atr": atr,
             "trend": trend,
-            "price_vs_ema12": "ABOVE" if current_price > ema12 else "BELOW"
+            "price_vs_ema12": "ABOVE" if last_candle_close > ema12 else "BELOW",
+            "ohlcv_data": ohlcv_data  # Return for entry price calculation
         }
         
     except Exception as e:
         return {"error": f"Analysis error for {timeframe}: {str(e)}"}
 
-def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
+def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_ticker_price: Optional[float] = None) -> Dict:
     """
-    Generate realistic crypto trading signals with multi-timeframe analysis
-    Targets 70-80% accuracy with strict technical analysis rules
+    Generate realistic crypto trading signals with multi-timeframe analysis.
+    Targets 70-80% accuracy with strict technical analysis rules.
+    
+    UPDATED LOGIC:
+    1. Uses only CLOSED candles for indicator calculations (no repainting)
+    2. Confirms signal on the last closed candle
+    3. Calculates entry price from next candle open estimate vs live ticker
+    4. Recommends MARKET or LIMIT order based on slippage
+    5. Includes metadata for backtesting and order execution
+    
+    Args:
+        symbol: Trading pair (e.g., "BTC-USDT")
+        timeframe: Primary timeframe for analysis
+        live_ticker_price: Optional live market price for MARKET/LIMIT decision
+    
+    Returns:
+        Signal dict with entry, order_type, entry_time_source, slippage_used
     """
     try:
         print(f"🔍 Analyzing {symbol} across multiple timeframes...")
         
-        # Analyze multiple timeframes
+        # Analyze multiple timeframes (all use closed candles only)
         timeframes = ["15min", "1hour", "4hour"]
         analyses = {}
         
@@ -250,15 +374,14 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
                 "error": "Need at least 2 valid timeframes for analysis"
             }
         
-        # Fetch real-time current price from KuCoin API
-        try:
-            current_price = get_ticker_price(symbol)
-            print(f"💰 Real-time price from KuCoin API: ${current_price:,.2f}")
-        except Exception as e:
-            print(f"⚠️ Failed to fetch real-time price, using OHLCV data: {e}")
-            # Fallback to price from OHLCV data if API call fails
-            primary_tf = "1hour" if "1hour" in valid_analyses else list(valid_analyses.keys())[0]
-            current_price = valid_analyses[primary_tf]["current_price"]
+        # Fetch real-time live ticker price from KuCoin API if not provided
+        if live_ticker_price is None:
+            try:
+                live_ticker_price = get_ticker_price(symbol)
+                print(f"💰 Real-time live ticker price from KuCoin API: ${live_ticker_price:,.2f}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch live ticker price: {e}")
+                live_ticker_price = None
         
         # Use the primary timeframe for indicators
         primary_tf = "1hour" if "1hour" in valid_analyses else list(valid_analyses.keys())[0]
@@ -268,9 +391,13 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
         ema26 = primary_data["ema26"]
         rsi = primary_data["rsi"]
         atr = primary_data["atr"]
+        last_candle_close = primary_data["last_candle_close"]
+        ohlcv_data = primary_data["ohlcv_data"]
         
-        # Debug logging for indicators
-        print(f"📊 Technical Indicators:")
+        # Debug logging for indicators (based on CLOSED candles only)
+        print(f"📊 Technical Indicators (from last CLOSED candle):")
+        print(f"   Last Candle Close: ${last_candle_close:,.2f}")
+        print(f"   Live Ticker Price: ${live_ticker_price:,.2f}" if live_ticker_price else "   Live Ticker Price: N/A")
         print(f"   RSI: {rsi:.2f}")
         print(f"   EMA12: ${ema12:,.2f}")
         print(f"   EMA26: ${ema26:,.2f}")
@@ -284,28 +411,26 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
         total_timeframes = len(valid_analyses)
         confidence = max(bullish_count, bearish_count) / total_timeframes
         
-        # Updated signal logic - BUY if EMA12 > EMA26 and RSI > 50, SELL if EMA12 < EMA26 and RSI < 50
+        # RULE: Confirm signal on the last CLOSED candle
+        # Signal logic: BUY if EMA12 > EMA26 and RSI > 50, SELL if EMA12 < EMA26 and RSI < 50
         signal = "HOLD"
         signal_reasons = []
-        entry_price = current_price
         
         # BUY Signal: EMA12 > EMA26 and RSI > 50
         if rsi is not None and ema12 > ema26 and rsi > 50:
             signal = "BUY"
-            entry_price = current_price
             signal_reasons.append(f"Bullish EMA trend (EMA12 {ema12:,.2f} > EMA26 {ema26:,.2f})")
             signal_reasons.append(f"RSI above 50 ({rsi:.1f} > 50) - bullish momentum")
             signal_reasons.append(f"{bullish_count}/{total_timeframes} timeframes confirm bullish trend")
-            print(f"✅ BUY Signal Generated: EMA12={ema12:,.2f} > EMA26={ema26:,.2f}, RSI={rsi:.1f} > 50")
+            print(f"✅ BUY Signal Confirmed (last closed candle): EMA12={ema12:,.2f} > EMA26={ema26:,.2f}, RSI={rsi:.1f} > 50")
         
         # SELL Signal: EMA12 < EMA26 and RSI < 50
         elif rsi is not None and ema12 < ema26 and rsi < 50:
             signal = "SELL"
-            entry_price = current_price
             signal_reasons.append(f"Bearish EMA trend (EMA12 {ema12:,.2f} < EMA26 {ema26:,.2f})")
             signal_reasons.append(f"RSI below 50 ({rsi:.1f} < 50) - bearish momentum")
             signal_reasons.append(f"{bearish_count}/{total_timeframes} timeframes confirm bearish trend")
-            print(f"✅ SELL Signal Generated: EMA12={ema12:,.2f} < EMA26={ema26:,.2f}, RSI={rsi:.1f} < 50")
+            print(f"✅ SELL Signal Confirmed (last closed candle): EMA12={ema12:,.2f} < EMA26={ema26:,.2f}, RSI={rsi:.1f} < 50")
         
         # HOLD: Conditions not met
         else:
@@ -315,6 +440,22 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
             signal_reasons.append(f"EMA12: ${ema12:,.2f}, EMA26: ${ema26:,.2f}")
             signal_reasons.append("Conditions not met: BUY needs EMA12 > EMA26 AND RSI > 50, SELL needs EMA12 < EMA26 AND RSI < 50")
             print(f"⏸️ HOLD Signal: EMA12={ema12:,.2f}, EMA26={ema26:,.2f}, RSI={rsi:.1f}")
+        
+        # RULE: Calculate entry price using next candle open estimate vs live ticker
+        entry_details = calculate_entry_price_and_order_type(
+            last_candle_close=last_candle_close,
+            live_ticker_price=live_ticker_price,
+            signal_type=signal,
+            slippage_limit=0.002,  # 0.2% default
+            slippage_buffer=0.0005  # 0.05% default buffer
+        )
+        
+        entry_price = entry_details["entry"]
+        order_type = entry_details["order_type"]
+        entry_time_source = entry_details["entry_time_source"]
+        slippage_used = entry_details["slippage_used"]
+        
+        print(f"💡 Entry Calculation: entry=${entry_price:,.2f}, order_type={order_type}, source={entry_time_source}, slippage={slippage_used:.4f}%")
         
         # Calculate Risk Management levels with fixed percentages
         # For BUY: Take Profit +1.5%, Stop Loss -1%
@@ -332,12 +473,18 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour") -> Dict:
         # Only send signals with confidence >= 0.70 (at least 2/3 timeframes agree)
         should_send_telegram = confidence >= 0.70
         
-        # Prepare result
+        # Prepare result with NEW METADATA FIELDS
         result = {
             "symbol": symbol,
             "signal": signal,
-            "current_price": round(current_price, 6),
-            "entry_price": round(entry_price, 6),
+            "last_candle_close": round(last_candle_close, 6),  # Last closed candle's close price
+            "live_ticker_price": round(live_ticker_price, 6) if live_ticker_price else None,  # Live market price
+            "entry_price": round(entry_price, 6),  # Calculated entry with slippage buffer
+            "entry": round(entry_price, 6),  # Alias for entry_price (NEW)
+            "order_type": order_type,  # MARKET or LIMIT (NEW)
+            "entry_time_source": entry_time_source,  # live_ticker or next_open_estimate (NEW)
+            "slippage_used": slippage_used,  # Percentage slippage used (NEW)
+            "next_candle_open_estimate": entry_details["next_candle_open_estimate"],  # Estimated next open (NEW)
             "ema12": ema12,
             "ema26": ema26,
             "rsi": rsi,
@@ -384,7 +531,10 @@ def send_signal_to_telegram(signal_data: Dict):
         
         symbol = signal_data.get("symbol", "N/A")
         signal = signal_data.get("signal", "HOLD")
-        entry_price = signal_data.get("entry_price", signal_data.get("current_price", 0))
+        entry_price = signal_data.get("entry_price", signal_data.get("entry", 0))
+        order_type = signal_data.get("order_type", "N/A")
+        entry_time_source = signal_data.get("entry_time_source", "N/A")
+        slippage_used = signal_data.get("slippage_used", 0)
         ema12 = signal_data.get("ema12", 0)
         ema26 = signal_data.get("ema26", 0)
         rsi = signal_data.get("rsi", 0)
@@ -401,11 +551,17 @@ def send_signal_to_telegram(signal_data: Dict):
             "HOLD": "🟡"
         }.get(signal, "⚪")
         
-        # Format message according to user specifications
+        # Order type emoji
+        order_emoji = "⚡" if order_type == "MARKET" else "📋"
+        
+        # Format message with NEW METADATA
         message = f"🚨 Crypto Signal Alert\n"
         message += f"Pair: {symbol}\n"
         message += f"Signal: {signal_emoji} {signal}\n"
         message += f"Entry: ${entry_price:,.2f}\n"
+        message += f"Order Type: {order_emoji} {order_type}\n"
+        message += f"Entry Source: {entry_time_source}\n"
+        message += f"Slippage: {slippage_used:.4f}%\n"
         
         # Calculate and display percentage changes
         if take_profit and stop_loss:

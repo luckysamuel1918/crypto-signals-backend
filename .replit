@@ -2,6 +2,7 @@ modules = ["python-3.11", "web", "nodejs-20"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["cacert", "cargo", "glibcLocales", "libiconv", "libxcrypt", "rustc"]
 
 [agent]
 expertMode = true

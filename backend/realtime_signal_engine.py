@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, Optional
 from datetime import datetime
-from backend.signals import analyze_timeframe, calculate_ema, calculate_rsi, calculate_atr, get_ohlcv_data, send_telegram_message
+from backend.signals import analyze_timeframe, calculate_ema, calculate_rsi, calculate_atr, get_ohlcv_data, send_telegram_message, calculate_entry_price_and_order_type
 from backend.websocket_manager import WebSocketPriceManager
 from backend.pre_signal_predictor import PreSignalPredictor
 
@@ -96,7 +96,7 @@ class RealtimeSignalEngine:
                 "bearish_count": bearish_count,
                 "total_timeframes": total_timeframes,
                 "confidence": confidence,
-                "last_candle_close": primary_data["current_price"],
+                "last_candle_close": primary_data["last_candle_close"],
                 "updated_at": time.time()
             }
             
@@ -107,7 +107,7 @@ class RealtimeSignalEngine:
             # Add data point to pre-signal predictor
             self.predictor.add_data_point(
                 symbol=symbol,
-                price=primary_data["current_price"],
+                price=primary_data["last_candle_close"],
                 rsi=primary_data["rsi"],
                 ema12=primary_data["ema12"],
                 ema26=primary_data["ema26"]
@@ -186,12 +186,11 @@ class RealtimeSignalEngine:
                 await self._send_pre_signal_alert(pre_signal)
             
             # ====================================================================
-            # ACTUAL SIGNAL DETECTION (existing logic)
+            # ACTUAL SIGNAL DETECTION (with NEW ENTRY PRICE LOGIC)
             # ====================================================================
             
             # Determine signal
             signal = None
-            entry_price = last_candle_close  # Use last candle close as baseline entry
             
             # BUY Signal: EMA12 > EMA26 and RSI > 50
             if ema12 > ema26 and rsi > 50:
@@ -211,16 +210,37 @@ class RealtimeSignalEngine:
                     print(f"🚨 NEW {signal} SIGNAL DETECTED: {symbol}")
                     print(f"{'='*60}")
                     
+                    # RULE: Calculate entry price using next candle open estimate vs live ticker
+                    entry_details = calculate_entry_price_and_order_type(
+                        last_candle_close=last_candle_close,
+                        live_ticker_price=price,  # Use current WebSocket price as live ticker
+                        signal_type=signal,
+                        slippage_limit=0.002,  # 0.2% default
+                        slippage_buffer=0.0005  # 0.05% default buffer
+                    )
+                    
+                    entry_price = entry_details["entry"]
+                    order_type = entry_details["order_type"]
+                    entry_time_source = entry_details["entry_time_source"]
+                    slippage_used = entry_details["slippage_used"]
+                    
                     # Calculate price difference from entry
                     price_diff_pct = ((price - entry_price) / entry_price) * 100
                     
+                    print(f"💡 Entry Calculation: entry=${entry_price:,.2f}, order_type={order_type}, source={entry_time_source}, slippage={slippage_used:.4f}%")
+                    
                     # Check if current price is within ±0.2% of entry price
                     if abs(price_diff_pct) <= 0.2:
-                        # Price is good - prepare signal for execution
+                        # Price is good - prepare signal for execution with NEW METADATA
                         signal_data = {
                             "symbol": symbol,
                             "signal": signal,
                             "entry_price": entry_price,
+                            "order_type": order_type,  # NEW
+                            "entry_time_source": entry_time_source,  # NEW
+                            "slippage_used": slippage_used,  # NEW
+                            "last_candle_close": last_candle_close,  # NEW
+                            "next_candle_open_estimate": entry_details["next_candle_open_estimate"],  # NEW
                             "current_live_price": price,
                             "price_diff_pct": price_diff_pct,
                             "ema12": ema12,
@@ -263,13 +283,30 @@ class RealtimeSignalEngine:
                         return signal_data
                         
                     else:
-                        # Price moved too much - adjust or skip
+                        # Price moved too much - adjust entry price
+                        # Recalculate with current price as the new "live ticker"
+                        adjusted_entry_details = calculate_entry_price_and_order_type(
+                            last_candle_close=last_candle_close,
+                            live_ticker_price=price,
+                            signal_type=signal,
+                            slippage_limit=0.002,
+                            slippage_buffer=0.0005
+                        )
+                        
+                        adjusted_entry = adjusted_entry_details["entry"]
+                        
+                        # Price moved too much - prepare adjusted signal with NEW METADATA
                         signal_data = {
                             "symbol": symbol,
                             "signal": signal,
-                            "entry_price": entry_price,
+                            "entry_price": adjusted_entry,
+                            "order_type": order_type,  # NEW
+                            "entry_time_source": entry_time_source,  # NEW
+                            "slippage_used": slippage_used,  # NEW
+                            "last_candle_close": last_candle_close,  # NEW
+                            "next_candle_open_estimate": entry_details["next_candle_open_estimate"],  # NEW
                             "current_live_price": price,
-                            "price_diff_pct": price_diff_pct,
+                            "price_diff_pct": ((price - adjusted_entry) / adjusted_entry) * 100,
                             "ema12": ema12,
                             "ema26": ema26,
                             "rsi": rsi,
@@ -278,11 +315,9 @@ class RealtimeSignalEngine:
                             "local_timestamp": local_timestamp,
                             "delay_seconds": delay_seconds,
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "action": "ADJUST_ENTRY"
+                            "action": "ADJUST_ENTRY",
+                            "adjusted": True
                         }
-                        
-                        # Adjust entry price to current live price
-                        adjusted_entry = price
                         
                         # Store active signal with adjusted entry
                         self.active_signals[symbol] = {
@@ -296,10 +331,8 @@ class RealtimeSignalEngine:
                         
                         print(f"⚠️ Price moved {price_diff_pct:+.3f}% from entry (> ±0.2% tolerance)")
                         print(f"🔄 Entry price adjusted: ${entry_price:,.2f} → ${adjusted_entry:,.2f}")
+                        print(f"💡 Adjusted Entry: order_type={order_type}, source={entry_time_source}, slippage={slippage_used:.4f}%")
                         print(f"✅ Signal prepared with adjusted entry")
-                        
-                        signal_data["entry_price"] = adjusted_entry
-                        signal_data["adjusted"] = True
                         
                         # Execute adjusted signal immediately
                         if self.execution_manager:

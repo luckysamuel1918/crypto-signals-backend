@@ -147,12 +147,21 @@ class ExecutionManager:
                 "SKIP": "⏭️ SKIPPED"
             }.get(action, "❓ UNKNOWN")
             
-            # Build message
+            # Order type emoji
+            order_type = execution.get("order_type", "N/A")
+            order_emoji = "⚡" if order_type == "MARKET" else "📋"
+            entry_time_source = execution.get("entry_time_source", "N/A")
+            slippage_used = execution.get("slippage_used", 0)
+            
+            # Build message with NEW METADATA
             message = f"🚨 **Real-Time Signal Alert**\n"
             message += f"Status: {action_status}\n"
             message += f"Pair: {symbol}\n"
             message += f"Signal: {signal_emoji} **{signal}**\n"
             message += f"Entry: ${execution['entry_price']:,.2f}\n"
+            message += f"Order Type: {order_emoji} {order_type}\n"
+            message += f"Entry Source: {entry_time_source}\n"
+            message += f"Slippage: {slippage_used:.4f}%\n"
             message += f"Live Price: ${execution['current_live_price']:,.2f} ({execution['price_diff_pct']:+.3f}%)\n"
             
             if execution["take_profit"] and execution["stop_loss"]:

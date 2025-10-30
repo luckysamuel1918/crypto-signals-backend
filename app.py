@@ -45,13 +45,13 @@ async def startup_event():
     ws_manager = WebSocketPriceManager()
     await ws_manager.start()
     
-    # Initialize Real-Time Signal Engine
-    print("🎯 Initializing Real-Time Signal Engine...")
-    signal_engine = RealtimeSignalEngine(ws_manager)
-    
     # Initialize Execution Manager
     print("⚡ Initializing Execution Manager...")
     execution_manager = ExecutionManager()
+    
+    # Initialize Real-Time Signal Engine (with execution manager)
+    print("🎯 Initializing Real-Time Signal Engine...")
+    signal_engine = RealtimeSignalEngine(ws_manager, execution_manager)
     
     # Start monitoring top crypto pairs
     print("\n📊 Starting real-time monitoring for top pairs...")

@@ -6,8 +6,9 @@ from backend.signals import analyze_timeframe, calculate_ema, calculate_rsi, cal
 from backend.websocket_manager import WebSocketPriceManager
 
 class RealtimeSignalEngine:
-    def __init__(self, ws_manager: WebSocketPriceManager):
+    def __init__(self, ws_manager: WebSocketPriceManager, execution_manager=None):
         self.ws_manager = ws_manager
+        self.execution_manager = execution_manager
         self.active_signals: Dict[str, Dict] = {}
         self.last_indicators: Dict[str, Dict] = {}
         self.indicator_update_interval = 60  # Update indicators every 60 seconds
@@ -201,7 +202,17 @@ class RealtimeSignalEngine:
                         print(f"📊 Indicators: EMA12={ema12:.2f}, EMA26={ema26:.2f}, RSI={rsi:.2f}")
                         print(f"🎯 Confidence: {confidence:.2%} ({indicators['bullish_count' if signal == 'BUY' else 'bearish_count']}/{indicators['total_timeframes']} timeframes)")
                         
-                        # Return signal for execution
+                        # Execute signal immediately
+                        if self.execution_manager:
+                            try:
+                                await self.execution_manager.execute_signal(signal_data)
+                            except Exception as e:
+                                print(f"❌ Execution error: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        else:
+                            print("⚠️ No execution manager configured - signal detected but not executed")
+                        
                         return signal_data
                         
                     else:
@@ -240,7 +251,17 @@ class RealtimeSignalEngine:
                         signal_data["entry_price"] = adjusted_entry
                         signal_data["adjusted"] = True
                         
-                        # Return adjusted signal for execution
+                        # Execute adjusted signal immediately
+                        if self.execution_manager:
+                            try:
+                                await self.execution_manager.execute_signal(signal_data)
+                            except Exception as e:
+                                print(f"❌ Execution error: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        else:
+                            print("⚠️ No execution manager configured - signal detected but not executed")
+                        
                         return signal_data
                         
         except Exception as e:

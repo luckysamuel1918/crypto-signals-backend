@@ -477,6 +477,7 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_tic
         result = {
             "symbol": symbol,
             "signal": signal,
+            "current_price": round(live_ticker_price, 6) if live_ticker_price else round(last_candle_close, 6),  # Current market price (for frontend)
             "last_candle_close": round(last_candle_close, 6),  # Last closed candle's close price
             "live_ticker_price": round(live_ticker_price, 6) if live_ticker_price else None,  # Live market price
             "entry_price": round(entry_price, 6),  # Calculated entry with slippage buffer

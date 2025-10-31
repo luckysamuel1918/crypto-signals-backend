@@ -18,7 +18,8 @@ def get_signal(symbol: str = Query("BTC-USDT", description="Symbol like BTC-USDT
     Example: GET /api/signal?symbol=BTC-USDT&timeframe=1hour
     """
     try:
-        return generate_signal(symbol.upper(), timeframe)
+        # Manual request from user - always send Telegram notification
+        return generate_signal(symbol.upper(), timeframe, manual_request=True)
     except Exception as e:
         # return a helpful message for debugging
         raise HTTPException(status_code=500, detail=str(e))

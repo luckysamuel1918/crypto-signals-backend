@@ -331,7 +331,7 @@ def analyze_timeframe(symbol: str, timeframe: str) -> Dict:
     except Exception as e:
         return {"error": f"Analysis error for {timeframe}: {str(e)}"}
 
-def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_ticker_price: Optional[float] = None) -> Dict:
+def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_ticker_price: Optional[float] = None, manual_request: bool = False) -> Dict:
     """
     Generate realistic crypto trading signals with multi-timeframe analysis.
     Targets 70-80% accuracy with strict technical analysis rules.
@@ -347,6 +347,7 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_tic
         symbol: Trading pair (e.g., "BTC-USDT")
         timeframe: Primary timeframe for analysis
         live_ticker_price: Optional live market price for MARKET/LIMIT decision
+        manual_request: If True, always send Telegram notification (user clicked "Get Signal")
     
     Returns:
         Signal dict with entry, order_type, entry_time_source, slippage_used
@@ -471,7 +472,8 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_tic
             stop_loss = round(entry_price * 1.01, 6)  # +1%
         
         # Only send signals with confidence >= 0.70 (at least 2/3 timeframes agree)
-        should_send_telegram = confidence >= 0.70
+        # BUT always send if manual_request (user clicked "Get Signal")
+        should_send_telegram = confidence >= 0.70 or manual_request
         
         # Prepare result with NEW METADATA FIELDS
         result = {
@@ -501,7 +503,8 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_tic
             "reasons": signal_reasons,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "timeframes_analyzed": list(valid_analyses.keys()),
-            "should_send_telegram": should_send_telegram
+            "should_send_telegram": should_send_telegram,
+            "manual_request": manual_request  # Track if this was a manual request
         }
         
         # Send Telegram notification
@@ -520,15 +523,21 @@ def generate_signal(symbol: str = "BTC-USDT", timeframe: str = "1hour", live_tic
         return error_result
 
 def send_signal_to_telegram(signal_data: Dict):
-    """Send formatted signal to Telegram with rich details - only if confidence >= 0.70"""
+    """Send formatted signal to Telegram - always send manual requests, confidence check for automated"""
     try:
-        # Only send if confidence >= 0.70 (or if there's an error to report)
+        # Check if we should send
+        manual_request = signal_data.get("manual_request", False)
         should_send = signal_data.get("should_send_telegram", False) or "error" in signal_data
         confidence = signal_data.get("confidence", 0)
         
-        if not should_send and confidence < 0.70:
+        # Skip only if NOT manual AND confidence < 0.70
+        if not should_send and confidence < 0.70 and not manual_request:
             print(f"⏭️ Skipping Telegram notification (confidence {confidence:.2f} < 0.70)")
             return
+        
+        # Log if this is a manual request
+        if manual_request:
+            print(f"📱 Sending manual request to Telegram (user clicked 'Get Signal')")
         
         symbol = signal_data.get("symbol", "N/A")
         signal = signal_data.get("signal", "HOLD")

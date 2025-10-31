@@ -40,8 +40,8 @@ def _send_single_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
+        "text": text
+        # Removed parse_mode to avoid special character parsing errors
     }
     try:
         response = requests.post(url, json=payload)

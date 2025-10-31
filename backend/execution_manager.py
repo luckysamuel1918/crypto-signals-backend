@@ -47,13 +47,18 @@ class ExecutionManager:
                 tp_pct = 0
                 sl_pct = 0
                 
-            # Prepare execution log entry
+            # Prepare execution log entry with NEW METADATA FIELDS
             execution_entry = {
                 "timestamp": signal_data["timestamp"],
                 "symbol": symbol,
                 "signal": signal,
                 "action": action,
                 "entry_price": entry_price,
+                "order_type": signal_data.get("order_type", "N/A"),  # NEW
+                "entry_time_source": signal_data.get("entry_time_source", "N/A"),  # NEW
+                "slippage_used": signal_data.get("slippage_used", 0),  # NEW
+                "last_candle_close": signal_data.get("last_candle_close"),  # NEW
+                "next_candle_open_estimate": signal_data.get("next_candle_open_estimate"),  # NEW
                 "current_live_price": signal_data["current_live_price"],
                 "price_diff_pct": signal_data["price_diff_pct"],
                 "take_profit": take_profit,
@@ -153,11 +158,11 @@ class ExecutionManager:
             entry_time_source = execution.get("entry_time_source", "N/A")
             slippage_used = execution.get("slippage_used", 0)
             
-            # Build message with NEW METADATA
-            message = f"🚨 **Real-Time Signal Alert**\n"
+            # Build message with NEW METADATA (plain text to avoid Markdown parsing errors)
+            message = f"🚨 Real-Time Signal Alert\n"
             message += f"Status: {action_status}\n"
             message += f"Pair: {symbol}\n"
-            message += f"Signal: {signal_emoji} **{signal}**\n"
+            message += f"Signal: {signal_emoji} {signal}\n"
             message += f"Entry: ${execution['entry_price']:,.2f}\n"
             message += f"Order Type: {order_emoji} {order_type}\n"
             message += f"Entry Source: {entry_time_source}\n"

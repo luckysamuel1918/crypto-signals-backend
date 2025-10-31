@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routes import router as routes_router, set_signal_engine
+from backend.routes import router as routes_router, set_signal_engine, set_trade_executor
 from backend.signals import setup_telegram_bot, generate_scheduled_signals
 from backend.websocket_manager import WebSocketPriceManager
 from backend.realtime_signal_engine import RealtimeSignalEngine
 from backend.execution_manager import ExecutionManager
+from backend.kucoin_client import KuCoinClient
+from backend.trade_executor import TradeExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 import asyncio
 import os
@@ -27,11 +29,13 @@ scheduler = None
 ws_manager = None
 signal_engine = None
 execution_manager = None
+kucoin_client = None
+trade_executor = None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize real-time trading system on FastAPI startup"""
-    global scheduler, ws_manager, signal_engine, execution_manager
+    global scheduler, ws_manager, signal_engine, execution_manager, kucoin_client, trade_executor
     
     print("\n" + "="*60)
     print("🚀 STARTING REAL-TIME TRADING SYSTEM")
@@ -39,6 +43,21 @@ async def startup_event():
     
     # Setup Telegram messaging (direct API calls, no bot polling)
     setup_telegram_bot()
+    
+    # Initialize KuCoin Client for automated trading
+    print("💼 Initializing KuCoin Trading Client...")
+    trading_mode = os.getenv("KUCOIN_MODE", "sandbox")  # sandbox or live
+    kucoin_client = KuCoinClient(mode=trading_mode)
+    
+    # Initialize Trade Executor
+    print("⚡ Initializing Trade Executor...")
+    auto_execute = os.getenv("AUTO_EXECUTE", "false").lower() == "true"
+    order_size_usdt = float(os.getenv("ORDER_SIZE_USDT", "10.0"))
+    trade_executor = TradeExecutor(
+        kucoin_client=kucoin_client,
+        auto_execute=auto_execute,
+        order_size_usdt=order_size_usdt
+    )
     
     # Initialize WebSocket Price Manager
     print("📡 Initializing WebSocket Price Manager...")
@@ -58,8 +77,9 @@ async def startup_event():
     
     signal_engine = RealtimeSignalEngine(ws_manager, execution_manager, signal_lead_time=signal_lead_time)
     
-    # Set signal engine reference for API routes
+    # Set references for API routes
     set_signal_engine(signal_engine)
+    set_trade_executor(trade_executor)
     
     # Start monitoring top crypto pairs
     print("\n📊 Starting real-time monitoring for top pairs...")
@@ -92,8 +112,9 @@ async def startup_event():
     print("📊 Monitoring: " + ", ".join(top_pairs))
     print("🔌 WebSocket: Active with REST API fallback")
     print("⚡ Execution: Instant with ±0.2% price tolerance")
-    print("⏱️ Delay Check: Skip if > 2 seconds")
     print(f"🔮 Pre-Signal Alerts: {signal_lead_time}s lead time (≥90% confidence)")
+    print(f"🤖 Auto-Trading: {'ENABLED' if auto_execute else 'DISABLED'} ({trading_mode} mode)")
+    print(f"💵 Order Size: ${order_size_usdt} USDT")
     print("="*60 + "\n")
 
 @app.on_event("shutdown")

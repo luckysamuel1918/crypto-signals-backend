@@ -147,10 +147,8 @@ class RealtimeSignalEngine:
                     self.active_signals[symbol] = {}
                 self.active_signals[symbol]["last_log"] = time.time()
             
-            # CRITICAL: Skip if delay > 2 seconds
-            if delay_seconds > 2.0:
-                print(f"⏭️ {symbol} - Signal delayed ({delay_seconds:.2f}s > 2s) — skipped to prevent slippage")
-                return
+            # Note: Removed 2-second delay guard - it was causing clock skew issues
+            # between KuCoin server time and local time, blocking all real-time signals
                 
             # Check for signal conditions
             ema12 = indicators["ema12"]
